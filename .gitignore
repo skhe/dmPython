@@ -5,6 +5,7 @@ dpi_include/
 build/
 dist/
 dist_fixed/
+dist_ci/
 *.egg-info/
 *.so
 *.dylib
@@ -17,9 +18,16 @@ dpi_bridge/libdmdpi.h
 .venv/
 .dm_home/
 __pycache__/
+*.pyc
 
 # IDE
 .idea/
 
 # Trace log
 dmPython_trace.log
+
+# macOS
+.DS_Store
+
+# Testing
+.pytest_cache/

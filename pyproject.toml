@@ -9,6 +9,10 @@ description = "Python DB-API 2.0 driver for DM (Dameng) database — macOS editi
 readme = "README.md"
 license = {text = "MulanPSL-2.0"}
 requires-python = ">=3.8"
+authors = [
+    {name = "Dameng"},
+    {name = "skhe"},
+]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -16,9 +20,22 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: C",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Database",
+    "Topic :: Database :: Front-Ends",
 ]
 keywords = ["Dameng", "DM8", "database", "DB-API"]
+
+[project.urls]
+Homepage = "https://github.com/skhe/dmPython"
+Repository = "https://github.com/skhe/dmPython"
+"Bug Tracker" = "https://github.com/skhe/dmPython/issues"
+Changelog = "https://github.com/skhe/dmPython/blob/main/CHANGELOG.md"
+"Upstream (Official)" = "https://github.com/DamengDB/dmPython"
 
 [tool.setuptools]
 py-modules = []

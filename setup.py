@@ -146,6 +146,13 @@ setup(
     if os.path.exists(os.path.join(HERE, "README.md"))
     else "",
     long_description_content_type="text/markdown",
+    author="Dameng / skhe",
+    url="https://github.com/skhe/dmPython",
+    project_urls={
+        "Bug Tracker": "https://github.com/skhe/dmPython/issues",
+        "Changelog": "https://github.com/skhe/dmPython/blob/main/CHANGELOG.md",
+        "Upstream (Official)": "https://github.com/DamengDB/dmPython",
+    },
     ext_modules=[extension],
     cmdclass={"build_ext": build_ext},
     keywords="Dameng DM8 database DB-API",
@@ -158,6 +165,12 @@ setup(
         "Operating System :: MacOS :: MacOS X",
         "Programming Language :: C",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Database",
+        "Topic :: Database :: Front-Ends",
     ],
 )

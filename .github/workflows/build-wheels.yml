@@ -23,6 +23,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.21"
+          cache-dependency-path: dpi_bridge/go.sum
 
       - uses: actions/setup-python@v5
         with:
@@ -44,6 +45,9 @@ jobs:
         run: pip install build delocate
 
       - name: Build wheel
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "14.0"
+          _PYTHON_HOST_PLATFORM: "macosx-14.0-arm64"
         run: DMPYTHON_SKIP_GO_BUILD=1 python -m build --wheel
 
       - name: Delocate wheel
