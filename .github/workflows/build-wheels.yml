@@ -114,8 +114,15 @@ jobs:
           pattern: wheel-*
           merge-multiple: true
 
-      - name: Create GitHub Release
+      - name: Upsert GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
-        run: gh release create "$TAG_NAME" --generate-notes dist_fixed/*.whl
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists, uploading artifacts with --clobber"
+            gh release upload "$TAG_NAME" dist_fixed/*.whl --clobber
+          else
+            echo "Creating release $TAG_NAME"
+            gh release create "$TAG_NAME" --generate-notes dist_fixed/*.whl
+          fi

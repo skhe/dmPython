@@ -31,3 +31,6 @@ dmPython_trace.log
 
 # Testing
 .pytest_cache/
+
+# Local technical notes
+TECHNICAL_REPORT.md
