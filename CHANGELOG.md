@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.31] - 2026-03-03
+
+### Fixed
+
+- 修复了大 CLOB 在特定 Unicode 模式（如 `稳态中文🚀X`）回读错位的问题，消除了 `U+FFFD` 替换字符导致的内容损坏。
+- 修复了 CLOB 分块写入在 UTF-8 边界处切分导致的潜在字符错位问题。
+
+### Added
+
+- 新增 P0 CLOB Unicode 回归测试集，覆盖高风险模式、`executemany`、长度契约与子进程防崩溃场景。
+- 新增并扩展 P0/P1/P2 集成测试分层与压力场景，提升稳定性回归覆盖。
+- 新增 DM 集成测试 CI 工作流与覆盖率产物上传。
+- 在 `dpi_bridge` 引入补丁化本地 DM Go 驱动依赖，并记录补丁说明文档。
+
 ## [2.5.30] - 2025-09-03
 
 ### Fixed

@@ -20,6 +20,7 @@ typedef dhandle         dhenv;
 typedef dhandle         dhcon;
 typedef dhandle         dhstmt;
 typedef dhandle         dhdesc;
+typedef dhandle         dhloblctr;
 
 typedef struct {
     sdint2  year;
@@ -547,6 +548,8 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) {
 		writeTimeValue(val, bind)
 	case DSQL_C_NUMERIC:
 		writeNumericValue(val, bind)
+	case DSQL_C_LOB_HANDLE:
+		writeLobHandleValue(val, bind, sqlType)
 	default:
 		// Default: treat as string
 		writeStringValue(val, bind)
@@ -864,6 +867,44 @@ func writeBinaryValue(val interface{}, bind bindColInfo) {
 	}
 }
 
+func writeLobHandleValue(val interface{}, bind bindColInfo, sqlType int16) {
+	var data []byte
+	switch v := val.(type) {
+	case nil:
+		if bind.indPtr != nil {
+			*bind.indPtr = C.slength(DSQL_NULL_DATA)
+		}
+		return
+	case []byte:
+		data = make([]byte, len(v))
+		copy(data, v)
+	case string:
+		data = []byte(v)
+	default:
+		s := fmt.Sprintf("%v", v)
+		data = []byte(s)
+	}
+
+	lobType := DSQL_BLOB
+	if sqlType == DSQL_CLOB {
+		lobType = DSQL_CLOB
+	}
+	lob := &lobHandle{
+		data:    data,
+		lobType: lobType,
+	}
+	id := allocHandle(lob)
+	*(*C.dhloblctr)(bind.dataPtr) = C.dhloblctr(handleToPtr(id))
+
+	ptrSize := C.slength(unsafe.Sizeof(uintptr(0)))
+	if bind.indPtr != nil {
+		*bind.indPtr = ptrSize
+	}
+	if bind.actLenPtr != nil {
+		*bind.actLenPtr = ptrSize
+	}
+}
+
 func writeTimestampValue(val interface{}, bind bindColInfo) {
 	var t time.Time
 	switch v := val.(type) {
@@ -1028,8 +1069,13 @@ func writeNumericValue(val interface{}, bind bindColInfo) {
 
 // extractBoundValue reads a value from a parameter binding buffer.
 func extractBoundValue(bind bindParamInfo) interface{} {
-	if bind.indPtr != nil && *bind.indPtr == C.slength(DSQL_NULL_DATA) {
-		return nil
+	if bind.indPtr != nil {
+		switch *bind.indPtr {
+		case C.slength(DSQL_NULL_DATA):
+			return nil
+		case C.slength(DSQL_DATA_AT_EXEC):
+			return extractDataAtExecValue(bind)
+		}
 	}
 	if bind.dataPtr == nil {
 		return nil
@@ -1085,12 +1131,68 @@ func extractBoundValue(bind bindParamInfo) interface{} {
 	case DSQL_C_NUMERIC:
 		num := (*C.dpi_numeric_t)(bind.dataPtr)
 		return numericToString(num)
+	case DSQL_C_LOB_HANDLE:
+		hlob := *(*C.dhloblctr)(bind.dataPtr)
+		if hlob == nil {
+			return nil
+		}
+		lob, err := getLobHandle(hlob)
+		if err != nil {
+			return nil
+		}
+		lob.mu.Lock()
+		data := make([]byte, len(lob.data))
+		copy(data, lob.data)
+		lobType := lob.lobType
+		lob.mu.Unlock()
+		if bind.sqlType == DSQL_CLOB || lobType == DSQL_CLOB {
+			return string(data)
+		}
+		return data
 	default:
 		// Treat as string
 		if bind.indPtr != nil && *bind.indPtr >= 0 {
 			return C.GoStringN((*C.char)(bind.dataPtr), C.int(*bind.indPtr))
 		}
 		return C.GoString((*C.char)(bind.dataPtr))
+	}
+}
+
+func extractDataAtExecValue(bind bindParamInfo) interface{} {
+	if bind.dataPtr == nil {
+		return nil
+	}
+
+	// LongString/LongBinary stores the real payload pointer in an sdint8 slot.
+	ptrVal := uintptr(*(*C.sdint8)(bind.dataPtr))
+	dataLen := 0
+	if bind.actLenPtr != nil && *bind.actLenPtr > 0 {
+		dataLen = int(*bind.actLenPtr)
+	}
+
+	switch bind.cType {
+	case DSQL_C_BINARY:
+		if dataLen == 0 {
+			return []byte{}
+		}
+		if ptrVal == 0 {
+			return []byte{}
+		}
+		return C.GoBytes(unsafe.Pointer(ptrVal), C.int(dataLen))
+	case DSQL_C_NCHAR, DSQL_C_CHAR, DSQL_C_WCHAR:
+		if dataLen == 0 {
+			return ""
+		}
+		if ptrVal == 0 {
+			return ""
+		}
+		raw := C.GoBytes(unsafe.Pointer(ptrVal), C.int(dataLen))
+		return string(raw)
+	default:
+		if dataLen == 0 || ptrVal == 0 {
+			return nil
+		}
+		return C.GoBytes(unsafe.Pointer(ptrVal), C.int(dataLen))
 	}
 }
 

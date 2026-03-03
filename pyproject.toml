@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dmPython-macOS"
-version = "2.5.30"
+version = "2.5.31"
 description = "Python DB-API 2.0 driver for DM (Dameng) database — macOS edition with built-in Go bridge"
 readme = "README.md"
 license = {text = "MulanPSL-2.0"}

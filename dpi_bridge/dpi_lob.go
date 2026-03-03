@@ -70,6 +70,9 @@ func dpi_alloc_lob_locator2(hcon C.dhcon, plob *C.dhloblctr) C.DPIRETURN {
 
 //export dpi_free_lob_locator
 func dpi_free_lob_locator(hlob C.dhloblctr) C.DPIRETURN {
+	if hlob == nil {
+		return DSQL_SUCCESS
+	}
 	id := ptrToHandle(unsafe.Pointer(hlob))
 	freeHandle(id)
 	return DSQL_SUCCESS
@@ -128,6 +131,9 @@ func dpi_lob_read(hlob C.dhloblctr, startPos C.ulength, ctype C.sdint2,
 	}
 
 	toRead := int(dataToRead)
+	if toRead < 0 {
+		toRead = 0
+	}
 	available := len(lob.data) - start
 	if toRead > available {
 		toRead = available
@@ -179,6 +185,13 @@ func dpi_lob_write(hlob C.dhloblctr, startPos C.ulength, ctype C.sdint2,
 		start = 0
 	}
 	toWrite := int(bytesToWrite)
+	if toWrite > 0 && val == nil {
+		if dataWrited != nil {
+			*dataWrited = 0
+		}
+		lob.lastErr = &diagInfo{errorCode: -1, message: "LOB write with nil buffer"}
+		return DSQL_ERROR
+	}
 
 	newData := C.GoBytes(unsafe.Pointer(val), C.int(toWrite))
 

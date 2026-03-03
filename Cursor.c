@@ -2417,6 +2417,7 @@ Cursor_ExecuteMany(
 {
 	PyObject*       statement;
     PyObject*       argsList;
+    PyObject*       argsIter = NULL;
     PyObject*       rowParams;
     PyObject*       retObj = NULL;
 
@@ -2427,16 +2428,17 @@ Cursor_ExecuteMany(
     
     DMPYTHON_TRACE_INFO(dpy_trace(statement, argsList, "ENTER Cursor_ExecuteMany, after parse args\n"));
 
-	if (PyIter_Check(argsList))
+    argsIter = PyObject_GetIter(argsList);
+	if (argsIter != NULL)
 	{	
         Py_INCREF(Py_None);
         retObj      = Py_None;
 
-		while(1)
-		{
-			rowParams = PyIter_Next(argsList);
-			if (rowParams == NULL)
-				break;
+			while(1)
+			{
+				rowParams = PyIter_Next(argsIter);
+				if (rowParams == NULL)
+					break;
 
             Py_XDECREF(retObj);
             retObj  = Cursor_Execute_inner(self, statement, rowParams, 0, 0, 0);
@@ -2449,12 +2451,23 @@ Cursor_ExecuteMany(
                 return NULL;
             }
 
-			Py_DECREF(rowParams);
-		}
-        
-        return retObj;
+				Py_DECREF(rowParams);
+			}
+
+        if (PyErr_Occurred())
+        {
+            Py_XDECREF(retObj);
+            Py_DECREF(argsIter);
+            return NULL;
+        }
+
+        Py_DECREF(argsIter);
+	        
+	        return retObj;
 	}
-	
+
+    PyErr_Clear();
+		
     retObj  = Cursor_Execute_inner(self, statement, argsList, 1, 0, 0);
 
     DMPYTHON_TRACE_INFO(dpy_trace(statement, argsList, "ENTER Cursor_ExecuteMany, Cursor_Execute_inner Per Row, %s\n", retObj == NULL ? "FAILED" : "SUCCESS"));
