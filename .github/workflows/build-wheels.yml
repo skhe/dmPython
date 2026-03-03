@@ -12,15 +12,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-14
-            arch: arm64
-          - runner: macos-13
-            arch: x86_64
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
-    runs-on: ${{ matrix.runner }}
-    name: "${{ matrix.arch }} — Python ${{ matrix.python-version }}"
+    runs-on: macos-14
+    name: "arm64 — Python ${{ matrix.python-version }}"
 
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +59,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel-${{ matrix.arch }}-py${{ matrix.python-version }}
+          name: wheel-arm64-py${{ matrix.python-version }}
           path: dist_fixed/*.whl
 
   release:
