@@ -1,4 +1,4 @@
-.PHONY: go-bridge wheel wheel-delocated universal2 clean test-install dpi-headers-secret
+.PHONY: go-bridge wheel wheel-delocated universal2 clean test-install dpi-headers-secret release-preflight
 
 # Go bridge library
 GO_BRIDGE_DIR = dpi_bridge
@@ -46,6 +46,10 @@ test-install:
 	/tmp/dmpython_test_venv/bin/python -c "import dmPython; print('dmPython version:', dmPython.version); print('OK')"
 	@echo "Test passed! Cleaning up..."
 	rm -rf /tmp/dmpython_test_venv
+
+# Release preflight checks (optional: make release-preflight TAG=v2.5.31)
+release-preflight:
+	./scripts/release_preflight.sh $(TAG)
 
 # Package DPI headers as base64 for GitHub Secret
 dpi-headers-secret:

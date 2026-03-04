@@ -20,12 +20,9 @@ extern "C" { 			/* Assume C declarations for C++   */
 
 #define NAMELEN                         128
 
-#define STRINGIFY(x)                    #x
-#define TOSTRING(x)                     STRINGIFY(x)
-
-/** 需同setup.py中保持一致 **/
-#ifndef BUILD_VERSION
-#define BUILD_VERSION                   2.5.30
+/** 需同setup.py/pyproject.toml中保持一致 **/
+#ifndef BUILD_VERSION_STRING
+#define BUILD_VERSION_STRING            "2.5.31"
 #endif
 
 #ifndef BUILD_VERSION_MAJOR
@@ -35,8 +32,6 @@ extern "C" { 			/* Assume C declarations for C++   */
 #ifndef BUILD_VERSION_MIN
 #define BUILD_VERSION_MIN               2
 #endif
-
-#define BUILD_VERSION_STRING            TOSTRING(BUILD_VERSION)
 
 /** 常量定义 **/
 #define SHUTDOWN_ABORT                  "ABORT"
@@ -241,4 +236,3 @@ DmIntNumber_AsInt(
 );
 
 #endif	// _PY_DAMENG_H
-

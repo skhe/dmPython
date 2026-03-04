@@ -8,6 +8,7 @@ producing a self-contained wheel that requires no DM_HOME or Go toolchain.
     python setup.py build_ext --inplace
 """
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -15,12 +16,23 @@ import sys
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext as _build_ext
 
-BUILD_VERSION = "2.5.31"
-
 # Directories
 HERE = os.path.dirname(os.path.abspath(__file__))
 DPI_BRIDGE_DIR = os.path.join(HERE, "dpi_bridge")
 NATIVE_SRC_DIR = os.path.join("src", "native")
+
+
+def read_project_version() -> str:
+    """Read the canonical package version from pyproject.toml."""
+    pyproject_path = os.path.join(HERE, "pyproject.toml")
+    text = open(pyproject_path, encoding="utf-8").read()
+    match = re.search(r'^\s*version\s*=\s*"([^"]+)"\s*$', text, re.MULTILINE)
+    if not match:
+        raise RuntimeError("Cannot determine project version from pyproject.toml")
+    return match.group(1)
+
+
+BUILD_VERSION = read_project_version()
 
 # All C source files
 C_SOURCE_FILES = [
@@ -79,6 +91,8 @@ if struct.calcsize("P") == 8:
 if sys.platform == "win32":
     define_macros.append(("WIN32", None))
     define_macros.append(("_CRT_SECURE_NO_WARNINGS", None))
+# Keep C extension runtime version aligned with project metadata.
+define_macros.append(("BUILD_VERSION_STRING", f'"{BUILD_VERSION}"'))
 # Uncomment for debug tracing:
 # define_macros.append(("TRACE", None))
 
@@ -136,7 +150,6 @@ extension = Extension(
     library_dirs=[DPI_BRIDGE_DIR],
     libraries=["dmdpi"],
     define_macros=define_macros,
-    extra_compile_args=["-DBUILD_VERSION=%s" % BUILD_VERSION],
     extra_link_args=["-Wl,-rpath,@loader_path"],
 )
 

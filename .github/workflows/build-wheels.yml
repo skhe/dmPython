@@ -62,11 +62,11 @@ jobs:
           /tmp/test_venv/bin/python -c "import dmPython; print('dmPython version:', dmPython.version)"
 
       - name: Build extension for optional integration tests
-        if: ${{ secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
+        if: ${{ matrix.python-version == '3.10' && secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
         run: DMPYTHON_SKIP_GO_BUILD=1 python setup.py build_ext --inplace
 
       - name: Run optional DM integration tests
-        if: ${{ secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
+        if: ${{ matrix.python-version == '3.10' && secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
         env:
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/dpi_bridge
           DM_TEST_HOST: ${{ secrets.DM_TEST_HOST }}
@@ -83,15 +83,16 @@ jobs:
           python -m pytest -q -m requires_dm tests --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
 
       - name: Upload optional integration coverage
-        if: ${{ secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
+        if: ${{ matrix.python-version == '3.10' && secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-wheel-py${{ matrix.python-version }}
+          name: coverage-wheel-baseline-py${{ matrix.python-version }}
           path: coverage.xml
 
       - name: Skip optional integration tests (missing DM secrets)
-        if: ${{ secrets.DM_TEST_HOST == '' || secrets.DM_TEST_PORT == '' || secrets.DM_TEST_USER == '' || secrets.DM_TEST_PASSWORD == '' }}
-        run: echo "Skipping requires_dm tests: DM_TEST_HOST/PORT/USER/PASSWORD secrets not fully configured."
+        if: ${{ matrix.python-version == '3.10' && (secrets.DM_TEST_HOST == '' || secrets.DM_TEST_PORT == '' || secrets.DM_TEST_USER == '' || secrets.DM_TEST_PASSWORD == '') }}
+        run: |
+          echo "::notice::SKIP_DM_INTEGRATION: DM_TEST_HOST/PORT/USER/PASSWORD secrets are not fully configured."
 
       - uses: actions/upload-artifact@v4
         with:
@@ -114,6 +115,58 @@ jobs:
           pattern: wheel-*
           merge-multiple: true
 
+      - name: Validate wheel set and generate release metadata
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import glob
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          wheels = sorted(glob.glob("dist_fixed/*.whl"))
+          if len(wheels) != 5:
+              print(f"Expected 5 wheels, got {len(wheels)}")
+              print("\n".join(wheels))
+              sys.exit(1)
+
+          expected_tags = {"cp39-cp39", "cp310-cp310", "cp311-cp311", "cp312-cp312", "cp313-cp313"}
+          found_tags = set()
+          for wheel in wheels:
+              name = os.path.basename(wheel)
+              if "arm64.whl" not in name:
+                  print(f"Non-arm64 wheel found: {name}")
+                  sys.exit(1)
+              match = re.search(r"-(cp\d{2,3}-cp\d{2,3})-macosx_.*_arm64\.whl$", name)
+              if not match:
+                  print(f"Unrecognized wheel naming pattern: {name}")
+                  sys.exit(1)
+              found_tags.add(match.group(1))
+          if found_tags != expected_tags:
+              print(f"Wheel tag mismatch. expected={sorted(expected_tags)} found={sorted(found_tags)}")
+              sys.exit(1)
+
+          with open("dist_fixed/build-metadata.json", "w", encoding="utf-8") as f:
+              json.dump(
+                  {
+                      "tag": os.environ["TAG_NAME"],
+                      "commit": os.environ.get("GITHUB_SHA", ""),
+                      "workflow": os.environ.get("GITHUB_WORKFLOW", ""),
+                      "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+                      "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+                      "wheels": [os.path.basename(w) for w in wheels],
+                  },
+                  f,
+                  ensure_ascii=False,
+                  indent=2,
+              )
+
+          subprocess.check_call("shasum -a 256 dist_fixed/*.whl > dist_fixed/checksums.txt", shell=True)
+          PY
+
       - name: Upsert GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -121,8 +174,44 @@ jobs:
         run: |
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release $TAG_NAME already exists, uploading artifacts with --clobber"
-            gh release upload "$TAG_NAME" dist_fixed/*.whl --clobber
+            gh release upload "$TAG_NAME" dist_fixed/*.whl dist_fixed/checksums.txt dist_fixed/build-metadata.json --clobber
           else
             echo "Creating release $TAG_NAME"
-            gh release create "$TAG_NAME" --generate-notes dist_fixed/*.whl
+            gh release create "$TAG_NAME" --generate-notes dist_fixed/*.whl dist_fixed/checksums.txt dist_fixed/build-metadata.json
           fi
+
+      - name: Verify release assets completeness
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          tag = os.environ["TAG_NAME"]
+          raw = subprocess.check_output(
+              ["gh", "release", "view", tag, "--json", "assets"],
+              text=True,
+          )
+          assets = [a["name"] for a in json.loads(raw)["assets"]]
+          expected_tags = {"cp39-cp39", "cp310-cp310", "cp311-cp311", "cp312-cp312", "cp313-cp313"}
+          found_tags = set()
+          for name in assets:
+              m = re.search(r"-(cp\d{2,3}-cp\d{2,3})-macosx_.*_arm64\.whl$", name)
+              if m:
+                  found_tags.add(m.group(1))
+          missing_tags = sorted(expected_tags - found_tags)
+          required_files = {"checksums.txt", "build-metadata.json"}
+          missing_files = sorted(f for f in required_files if f not in assets)
+          if missing_tags or missing_files:
+              print("Release assets are incomplete.")
+              print(f"missing wheel tags: {missing_tags}")
+              print(f"missing files: {missing_files}")
+              print(f"assets: {assets}")
+              sys.exit(1)
+          print("Release assets verified:", assets)
+          PY

@@ -11,15 +11,17 @@
 """
 import sys
 import traceback
+import os
+from pathlib import Path
 
 import dmPython
 
 # 连接参数 — docker 容器 dm8_test 映射到宿主机 5237
 CONN_PARAMS = {
-    "user": "SYSDBA",
-    "password": "SYSDBA001",
-    "server": "localhost",
-    "port": 5237,
+    "user": os.getenv("DM_TEST_USER", "SYSDBA"),
+    "password": os.getenv("DM_TEST_PASSWORD", "SYSDBA001"),
+    "server": os.getenv("DM_TEST_HOST", "localhost"),
+    "port": int(os.getenv("DM_TEST_PORT", "5237")),
 }
 
 TEST_TABLE = "DMPYTHON_TEST_TBL"
@@ -39,9 +41,24 @@ def run_test(name, func):
         failed += 1
 
 
+def _read_project_version() -> str:
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    for line in pyproject.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("version = "):
+            value = stripped.split("=", 1)[1].strip()
+            return value.strip('"')
+    raise RuntimeError("Cannot read project version from pyproject.toml")
+
+
+def get_expected_version() -> str:
+    return _read_project_version()
+
+
 def test_version():
     assert hasattr(dmPython, "version"), "缺少 version 属性"
-    assert dmPython.version == "2.5.30", f"版本不匹配: {dmPython.version}"
+    expected = get_expected_version()
+    assert dmPython.version == expected, f"版本不匹配: got={dmPython.version}, expected={expected}"
 
 
 def test_connect():

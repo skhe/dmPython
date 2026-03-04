@@ -25,7 +25,7 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 从 [GitHub Releases](https://github.com/skhe/dmPython/releases) 下载预编译 wheel：
 
 ```bash
-pip install dmPython_macOS-2.5.30-cp312-cp312-macosx_14_0_arm64.whl
+pip install dmPython_macOS-2.5.31-cp312-cp312-macosx_14_0_arm64.whl
 ```
 
 ## 快速开始

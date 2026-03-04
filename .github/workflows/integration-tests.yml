@@ -58,18 +58,21 @@ jobs:
         run: |
           python -m pip install pytest pytest-timeout pytest-cov
           python setup.py build_ext --inplace
-          python -m pytest -q tests/integration -m "p0_stability or p1_contract" --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
+          python -m pytest -q tests/integration -m "p0_stability or p1_contract" --junitxml=pytest-pr.xml --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
 
       - name: Upload coverage report (PR)
         if: steps.dm_ready.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-pr
-          path: coverage.xml
+          path: |
+            coverage.xml
+            pytest-pr.xml
 
       - name: Skip lightweight integration tests
         if: steps.dm_ready.outputs.available != 'true'
-        run: echo "Skipping PR integration tests: DM secrets are not configured."
+        run: |
+          echo "::notice::SKIP_DM_INTEGRATION: PR integration tests are skipped because DM secrets are not configured."
 
   full-regression:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
@@ -125,15 +128,40 @@ jobs:
         run: |
           python -m pip install pytest pytest-timeout pytest-cov
           python setup.py build_ext --inplace
-          python -m pytest -q tests/integration -m "p0_stability or p1_contract or p2_scale" --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
+          start_ts=$(date +%s)
+          python -m pytest -q tests/integration -m "p0_stability or p1_contract or p2_scale" --junitxml=pytest-full.xml --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
+          end_ts=$(date +%s)
+          duration=$((end_ts - start_ts))
+          python - <<PY
+          import json
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("pytest-full.xml").getroot()
+          attrs = root.attrib
+          trend = {
+              "tests": int(float(attrs.get("tests", "0"))),
+              "failures": int(float(attrs.get("failures", "0"))),
+              "errors": int(float(attrs.get("errors", "0"))),
+              "skipped": int(float(attrs.get("skipped", "0"))),
+              "pytest_reported_seconds": float(attrs.get("time", "0")),
+              "wall_clock_seconds": int(${duration}),
+          }
+          with open("trend-full-regression.json", "w", encoding="utf-8") as f:
+              json.dump(trend, f, indent=2, ensure_ascii=False)
+          print(trend)
+          PY
 
       - name: Upload coverage report (full)
         if: steps.dm_ready.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-full
-          path: coverage.xml
+          path: |
+            coverage.xml
+            pytest-full.xml
+            trend-full-regression.json
 
       - name: Skip full integration tests
         if: steps.dm_ready.outputs.available != 'true'
-        run: echo "Skipping full integration tests: DM secrets are not configured."
+        run: |
+          echo "::notice::SKIP_DM_INTEGRATION: Full regression is skipped because DM secrets are not configured."
