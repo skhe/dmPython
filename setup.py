@@ -20,6 +20,7 @@ from setuptools.command.build_ext import build_ext as _build_ext
 HERE = os.path.dirname(os.path.abspath(__file__))
 DPI_BRIDGE_DIR = os.path.join(HERE, "dpi_bridge")
 NATIVE_SRC_DIR = os.path.join("src", "native")
+DPI_INCLUDE_PLACEHOLDER = "__DM_DPI_INCLUDE_PLACEHOLDER__"
 
 
 def read_project_version() -> str:
@@ -81,9 +82,6 @@ def find_dpi_include():
         "See README.md for details."
     )
 
-
-DPI_INCLUDE_DIR = find_dpi_include()
-
 # Macros
 define_macros = []
 if struct.calcsize("P") == 8:
@@ -101,6 +99,12 @@ class build_ext(_build_ext):
     """Custom build_ext that builds the Go bridge library before compiling."""
 
     def run(self):
+        dpi_include_dir = find_dpi_include()
+        for ext in self.extensions:
+            ext.include_dirs = [
+                dpi_include_dir if d == DPI_INCLUDE_PLACEHOLDER else d
+                for d in ext.include_dirs
+            ]
         if not os.environ.get("DMPYTHON_SKIP_GO_BUILD"):
             self._build_go_bridge()
         super().run()
@@ -146,7 +150,7 @@ class build_ext(_build_ext):
 extension = Extension(
     name="dmPython",
     sources=C_SOURCES,
-    include_dirs=[DPI_INCLUDE_DIR, os.path.join(HERE, NATIVE_SRC_DIR)],
+    include_dirs=[DPI_INCLUDE_PLACEHOLDER, os.path.join(HERE, NATIVE_SRC_DIR)],
     library_dirs=[DPI_BRIDGE_DIR],
     libraries=["dmdpi"],
     define_macros=define_macros,
