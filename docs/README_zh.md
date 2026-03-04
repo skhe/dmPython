@@ -9,7 +9,7 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 
 本项目是 [官方 dmPython](https://github.com/DamengDB/dmPython) 的社区 fork。上游项目依赖的专有 C 库 `libdmdpi` 不提供 macOS 版本，本 fork 使用 Go 编写的 DPI 桥接库（`dpi_bridge/`）替代，实现原生 macOS ARM64 支持，无需安装完整的达梦数据库。
 
-**当前版本：** 2.5.30
+**当前版本：** 2.5.31
 
 ## 特性
 
@@ -90,18 +90,21 @@ define_macros.append(('TRACE', None))
 dmPython/
 ├── setup.py              # 构建脚本
 ├── pyproject.toml        # 项目元数据
+├── docs/                 # 项目文档（中文 README、技术报告）
+├── scripts/              # 本地/运维脚本
+├── src/native/           # C 扩展源码与头文件
 ├── dpi_bridge/           # Go DPI 桥接库（替代专有 libdmdpi）
 │   ├── main.go
 │   ├── go.mod / go.sum
 │   └── ...
 ├── dpi_include/          # DPI 头文件（不随源码分发，见 README）
-├── py_Dameng.c/h         # 模块入口，类型注册，异常层次
-├── strct.h               # 核心结构定义 (Environment, Connection, Cursor)
-├── Connection.c          # 连接管理
-├── Cursor.c              # 游标操作，SQL 执行
-├── var.c                 # 变量管理核心
-├── v*.c                  # 各类型变量处理器
-├── ex*.c                 # 外部对象接口 (LOB, BFILE, Object)
+├── src/native/py_Dameng.c/h  # 模块入口，类型注册，异常层次
+├── src/native/strct.h        # 核心结构定义 (Environment, Connection, Cursor)
+├── src/native/Connection.c   # 连接管理
+├── src/native/Cursor.c       # 游标操作，SQL 执行
+├── src/native/var.c          # 变量管理核心
+├── src/native/v*.c           # 各类型变量处理器
+├── src/native/ex*.c          # 外部对象接口 (LOB, BFILE, Object)
 └── .github/workflows/    # CI：构建 macOS ARM64 wheels (Python 3.9–3.13)
 ```
 
@@ -111,4 +114,4 @@ dmPython/
 
 ---
 
-[English README (README.md)](README.md)
+[English README (README.md)](../README.md)

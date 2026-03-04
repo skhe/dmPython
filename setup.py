@@ -17,8 +17,13 @@ from setuptools.command.build_ext import build_ext as _build_ext
 
 BUILD_VERSION = "2.5.31"
 
+# Directories
+HERE = os.path.dirname(os.path.abspath(__file__))
+DPI_BRIDGE_DIR = os.path.join(HERE, "dpi_bridge")
+NATIVE_SRC_DIR = os.path.join("src", "native")
+
 # All C source files
-C_SOURCES = [
+C_SOURCE_FILES = [
     "py_Dameng.c",
     "row.c",
     "Cursor.c",
@@ -42,10 +47,7 @@ C_SOURCES = [
     "vBfile.c",
     "trc.c",
 ]
-
-# Directories
-HERE = os.path.dirname(os.path.abspath(__file__))
-DPI_BRIDGE_DIR = os.path.join(HERE, "dpi_bridge")
+C_SOURCES = [os.path.join(NATIVE_SRC_DIR, f) for f in C_SOURCE_FILES]
 
 
 def find_dpi_include():
@@ -130,7 +132,7 @@ class build_ext(_build_ext):
 extension = Extension(
     name="dmPython",
     sources=C_SOURCES,
-    include_dirs=[DPI_INCLUDE_DIR],
+    include_dirs=[DPI_INCLUDE_DIR, os.path.join(HERE, NATIVE_SRC_DIR)],
     library_dirs=[DPI_BRIDGE_DIR],
     libraries=["dmdpi"],
     define_macros=define_macros,

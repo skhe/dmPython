@@ -71,18 +71,21 @@ DMPYTHON_SKIP_GO_BUILD=1 python -m build --wheel
 dmPython/
 ├── setup.py              # Build script
 ├── pyproject.toml        # Project metadata
+├── docs/                 # Project docs (zh README, technical notes)
+├── scripts/              # Local/ops scripts
+├── src/native/           # C extension sources and headers
 ├── dpi_bridge/           # Go-based DPI bridge (replaces proprietary libdmdpi)
 │   ├── main.go
 │   ├── go.mod / go.sum
 │   └── ...
 ├── dpi_include/          # DPI header files (not distributed, see README)
-├── py_Dameng.c/h         # Module entry, type registration, exception hierarchy
-├── strct.h               # Core struct definitions (Environment, Connection, Cursor)
-├── Connection.c          # Connection management
-├── Cursor.c              # Cursor operations, SQL execution
-├── var.c                 # Variable management core
-├── v*.c                  # Type-specific variable handlers
-├── ex*.c                 # External object interfaces (LOB, BFILE, Object)
+├── src/native/py_Dameng.c/h  # Module entry, type registration, exception hierarchy
+├── src/native/strct.h        # Core struct definitions (Environment, Connection, Cursor)
+├── src/native/Connection.c   # Connection management
+├── src/native/Cursor.c       # Cursor operations, SQL execution
+├── src/native/var.c          # Variable management core
+├── src/native/v*.c           # Type-specific variable handlers
+├── src/native/ex*.c          # External object interfaces (LOB, BFILE, Object)
 └── .github/workflows/    # CI: builds macOS ARM64 wheels for Python 3.9–3.13
 ```
 
@@ -92,4 +95,4 @@ Licensed under [Mulan PSL v2](http://license.coscl.org.cn/MulanPSL2).
 
 ---
 
-[中文文档 (README_zh.md)](README_zh.md)
+[中文文档 (docs/README_zh.md)](docs/README_zh.md)
