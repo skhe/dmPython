@@ -61,12 +61,27 @@ jobs:
           /tmp/test_venv/bin/pip install dist_fixed/*.whl
           /tmp/test_venv/bin/python -c "import dmPython; print('dmPython version:', dmPython.version)"
 
+      - name: Check DM secrets availability
+        id: dm_ready
+        if: ${{ matrix.python-version == '3.10' }}
+        env:
+          DM_TEST_HOST: ${{ secrets.DM_TEST_HOST }}
+          DM_TEST_PORT: ${{ secrets.DM_TEST_PORT }}
+          DM_TEST_USER: ${{ secrets.DM_TEST_USER }}
+          DM_TEST_PASSWORD: ${{ secrets.DM_TEST_PASSWORD }}
+        run: |
+          if [ -n "$DM_TEST_HOST" ] && [ -n "$DM_TEST_PORT" ] && [ -n "$DM_TEST_USER" ] && [ -n "$DM_TEST_PASSWORD" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build extension for optional integration tests
-        if: ${{ matrix.python-version == '3.10' && secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
+        if: ${{ matrix.python-version == '3.10' && steps.dm_ready.outputs.available == 'true' }}
         run: DMPYTHON_SKIP_GO_BUILD=1 python setup.py build_ext --inplace
 
       - name: Run optional DM integration tests
-        if: ${{ matrix.python-version == '3.10' && secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
+        if: ${{ matrix.python-version == '3.10' && steps.dm_ready.outputs.available == 'true' }}
         env:
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/dpi_bridge
           DM_TEST_HOST: ${{ secrets.DM_TEST_HOST }}
@@ -83,14 +98,14 @@ jobs:
           python -m pytest -q -m requires_dm tests --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
 
       - name: Upload optional integration coverage
-        if: ${{ matrix.python-version == '3.10' && secrets.DM_TEST_HOST != '' && secrets.DM_TEST_PORT != '' && secrets.DM_TEST_USER != '' && secrets.DM_TEST_PASSWORD != '' }}
+        if: ${{ matrix.python-version == '3.10' && steps.dm_ready.outputs.available == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-wheel-baseline-py${{ matrix.python-version }}
           path: coverage.xml
 
       - name: Skip optional integration tests (missing DM secrets)
-        if: ${{ matrix.python-version == '3.10' && (secrets.DM_TEST_HOST == '' || secrets.DM_TEST_PORT == '' || secrets.DM_TEST_USER == '' || secrets.DM_TEST_PASSWORD == '') }}
+        if: ${{ matrix.python-version == '3.10' && steps.dm_ready.outputs.available != 'true' }}
         run: |
           echo "::notice::SKIP_DM_INTEGRATION: DM_TEST_HOST/PORT/USER/PASSWORD secrets are not fully configured."
 
