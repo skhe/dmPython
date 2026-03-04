@@ -14,7 +14,7 @@ This is a community fork of the [official dmPython](https://github.com/DamengDB/
 Download a pre-built wheel from [GitHub Releases](https://github.com/skhe/dmPython/releases):
 
 ```bash
-pip install dmPython_macOS-2.5.31-cp312-cp312-macosx_14_0_arm64.whl
+pip install dmPython_macOS-2.5.32-cp312-cp312-macosx_14_0_arm64.whl
 ```
 
 ## Quick Start

@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.32] - 2026-03-04
+
+### Fixed
+
+- 修复了 GitHub Actions 中发布步骤与已存在 Release 冲突导致失败的问题：当 tag 已存在时改为 `gh release upload --clobber` 幂等上传。
+- 修复了 release 任务偶发“发布成功但缺少 wheel 附件”的风险，新增发布后资产完整性校验并输出缺失清单。
+
+### Changed
+
+- 优化 CI 分层与门禁信号，确保 DM 集成测试按环境条件可控执行，避免误报。
+- 统一版本链路文档示例到 `2.5.32`，保持发布元数据与使用说明一致。
+
 ## [2.5.31] - 2026-03-03
 
 ### Fixed

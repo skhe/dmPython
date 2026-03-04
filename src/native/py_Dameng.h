@@ -22,7 +22,7 @@ extern "C" { 			/* Assume C declarations for C++   */
 
 /** 需同setup.py/pyproject.toml中保持一致 **/
 #ifndef BUILD_VERSION_STRING
-#define BUILD_VERSION_STRING            "2.5.31"
+#define BUILD_VERSION_STRING            "2.5.32"
 #endif
 
 #ifndef BUILD_VERSION_MAJOR

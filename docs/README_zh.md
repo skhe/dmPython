@@ -9,7 +9,7 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 
 本项目是 [官方 dmPython](https://github.com/DamengDB/dmPython) 的社区 fork。上游项目依赖的专有 C 库 `libdmdpi` 不提供 macOS 版本，本 fork 使用 Go 编写的 DPI 桥接库（`dpi_bridge/`）替代，实现原生 macOS ARM64 支持，无需安装完整的达梦数据库。
 
-**当前版本：** 2.5.31
+**当前版本：** 2.5.32
 
 ## 特性
 
@@ -25,7 +25,7 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 从 [GitHub Releases](https://github.com/skhe/dmPython/releases) 下载预编译 wheel：
 
 ```bash
-pip install dmPython_macOS-2.5.31-cp312-cp312-macosx_14_0_arm64.whl
+pip install dmPython_macOS-2.5.32-cp312-cp312-macosx_14_0_arm64.whl
 ```
 
 ## 快速开始
