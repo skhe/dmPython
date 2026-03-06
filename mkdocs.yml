@@ -1,0 +1,27 @@
+site_name: dmPython-macOS Documentation
+site_description: dmPython-macOS API reference and examples
+site_url: https://skhe.github.io/dmPython/
+repo_url: https://github.com/skhe/dmPython
+repo_name: skhe/dmPython
+
+theme:
+  name: mkdocs
+
+markdown_extensions:
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - 首页: index.md
+  - 安装指南: installation.md
+  - 快速开始: quickstart.md
+  - API 参考: api-reference.md
+  - 示例:
+    - 基本增删改查: examples/basic-crud.md
+    - 批量插入: examples/bulk-insert.md
+    - LOB 大对象操作: examples/lob-handling.md
+    - 存储过程调用: examples/stored-proc.md
+    - 连接池: examples/connection-pool.md
+  - 迁移指南: migration.md
+  - 常见问题: faq.md
