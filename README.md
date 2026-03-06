@@ -39,6 +39,16 @@ cursor.close()
 conn.close()
 ```
 
+## Documentation
+
+- GitHub Pages: https://skhe.github.io/dmPython/
+- Local preview:
+
+```bash
+pip install mkdocs
+mkdocs serve
+```
+
 ## Building from Source
 
 **Prerequisites:**
