@@ -34,3 +34,5 @@ dmPython_trace.log
 
 # Local technical notes
 TECHNICAL_REPORT.md
+
+.worktrees/
