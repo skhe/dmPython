@@ -26,7 +26,7 @@ For production environments, prefer the official [DamengDB/dmPython](https://git
 The long-term improvement roadmap and phase status are maintained in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Current phase snapshot:
-- **Phase 1 (Week 1-2)**: IN_PROGRESS
+- **Phase 1 (Week 1-2)**: DONE
 - **Phase 2 (Week 3-4)**: NOT_STARTED
 - **Phase 3 (Week 5-6)**: NOT_STARTED
 - **Phase 4 (Week 7-8)**: NOT_STARTED

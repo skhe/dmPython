@@ -28,7 +28,7 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 总体提升路线图与阶段状态维护在 [docs/ROADMAP.md](ROADMAP.md)。
 
 当前阶段摘要：
-- **Phase 1（Week 1-2）**：IN_PROGRESS
+- **Phase 1（Week 1-2）**：DONE
 - **Phase 2（Week 3-4）**：NOT_STARTED
 - **Phase 3（Week 5-6）**：NOT_STARTED
 - **Phase 4（Week 7-8）**：NOT_STARTED

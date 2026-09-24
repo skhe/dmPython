@@ -13,7 +13,7 @@ This document is the single source of truth (SSOT) for the project-level improve
 
 | Phase | Window | Status | Owner | Exit Criteria | Last Updated | Evidence Links |
 | --- | --- | --- | --- | --- | --- | --- |
-| Phase 1 | Week 1-2 | IN_PROGRESS | Maintainers | README/README_zh positioning updated, ROADMAP established, roadmap status check wired into CI | 2026-03-04 | - |
+| Phase 1 | Week 1-2 | DONE | Maintainers | README/README_zh positioning updated, ROADMAP established, roadmap status check wired into CI | 2026-09-24 | [64152ae](https://github.com/skhe/dmPython/commit/64152ae) · [lint](https://github.com/skhe/dmPython/actions/runs/36018070212) · [wheels](https://github.com/skhe/dmPython/actions/runs/36018069837) |
 | Phase 2 | Week 3-4 | NOT_STARTED | Maintainers | `requires_dm` regression green, no crash/139, P0/P1 contract coverage strengthened | 2026-03-04 | - |
 | Phase 3 | Week 5-6 | NOT_STARTED | Maintainers | Release preflight and asset verification stable, tag release idempotency remains green | 2026-03-04 | - |
 | Phase 4 | Week 7-8 | NOT_STARTED | Maintainers | Third-party patch drift guard and upstream sync governance are documented and enforced | 2026-03-04 | - |
@@ -62,7 +62,10 @@ Clarify project positioning and make roadmap state tracking enforceable in repos
 
 ### Completion Notes
 
-Pending.
+- README.md and docs/README_zh.md carry the production usage notice, support policy, and a phase snapshot mirroring this table.
+- docs/ROADMAP.md is the phase SSOT: 4 phases with status vocabulary, dates, and evidence links.
+- scripts/check_roadmap_status.py runs inside the workflow-lint pipeline, so stale status metadata fails CI.
+- Verified on 64152ae: Workflow Lint and Build macOS wheels both green.
 
 ## Phase 2 (Week 3-4): Test Coverage and Stability Convergence
 
