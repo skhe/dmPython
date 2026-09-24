@@ -36,3 +36,7 @@ dmPython_trace.log
 TECHNICAL_REPORT.md
 
 .worktrees/
+
+# Local agent and browser tooling
+.playwright-mcp/
+docs/superpowers/
