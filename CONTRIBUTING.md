@@ -47,7 +47,14 @@ python -c "import dmPython; print(dmPython.version)"
 1. Fork the repository and create a feature branch from `main`.
 2. Make your changes with clear, focused commits.
 3. Ensure the project builds successfully.
-4. Open a pull request against `main` with a clear description of the change.
+4. If your change completes any roadmap phase deliverable, update `docs/ROADMAP.md`:
+   - set phase `Status` to `DONE` when completed,
+   - update `Last Updated` (`YYYY-MM-DD`),
+   - add evidence links (PR/commit/workflow run),
+   - add a short completion note in the phase detail section.
+5. Open a pull request against `main` with a clear description of the change.
+
+Roadmap status updates are validated in CI via `scripts/check_roadmap_status.py`.
 
 ## Code Style
 

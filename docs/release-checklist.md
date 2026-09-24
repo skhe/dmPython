@@ -26,3 +26,4 @@
 - [ ] Update `CHANGELOG.md` if needed
 - [ ] Verify release notes and links are correct
 - [ ] Record any incidents/fixes back into `PATCHES.md` or docs
+- [ ] Confirm `docs/ROADMAP.md` phase status is synchronized with the latest completed milestone (status/date/evidence links)
