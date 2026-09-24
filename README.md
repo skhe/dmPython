@@ -9,6 +9,28 @@ A Python DB-API 2.0 driver for the [Dameng (DM8)](https://www.dameng.com/) datab
 
 This is a community fork of the [official dmPython](https://github.com/DamengDB/dmPython) driver. The upstream project relies on a proprietary C library (`libdmdpi`) that is not available for macOS. This fork replaces it with a Go-based DPI bridge (`dpi_bridge/`), enabling native macOS ARM64 support without requiring a full Dameng installation.
 
+## Production Usage Notice
+
+This fork is primarily recommended for **local development validation**, feature verification, and CI regression on macOS ARM64.
+
+For production environments, prefer the official [DamengDB/dmPython](https://github.com/DamengDB/dmPython) package (or vendor-supported distribution) to align with official support boundaries, compliance requirements, and SLA expectations.
+
+## Support Policy
+
+- **Supported**: macOS ARM64 and scenarios covered by this repository's CI and integration test matrix.
+- **Best-effort**: Extended scenarios not currently covered by CI.
+- **Not guaranteed**: Production SLA commitments, vendor-certified compatibility guarantees, and closed-source component support contracts.
+
+## Roadmap & Status
+
+The long-term improvement roadmap and phase status are maintained in [docs/ROADMAP.md](docs/ROADMAP.md).
+
+Current phase snapshot:
+- **Phase 1 (Week 1-2)**: IN_PROGRESS
+- **Phase 2 (Week 3-4)**: NOT_STARTED
+- **Phase 3 (Week 5-6)**: NOT_STARTED
+- **Phase 4 (Week 7-8)**: NOT_STARTED
+
 ## Installation
 
 Download a pre-built wheel from [GitHub Releases](https://github.com/skhe/dmPython/releases):

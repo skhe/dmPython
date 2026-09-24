@@ -11,6 +11,28 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 
 **当前版本：** 2.5.32
 
+## 生产使用说明
+
+本仓库版本主要建议用于 **本地开发验证**、功能联调和 CI 回归验证场景（macOS ARM64）。
+
+如需生产环境部署，建议优先使用官方 [DamengDB/dmPython](https://github.com/DamengDB/dmPython)（或厂商支持的发行版本），以满足官方支持边界、合规要求和 SLA 约束。
+
+## 支持策略
+
+- **Supported（支持）**：macOS ARM64 以及本仓库 CI/集成测试已覆盖的场景。
+- **Best-effort（尽力支持）**：尚未纳入 CI 覆盖的扩展使用场景。
+- **Not guaranteed（不保证）**：生产 SLA 承诺、厂商认证兼容性与闭源组件支持协议。
+
+## 路线图与状态
+
+总体提升路线图与阶段状态维护在 [docs/ROADMAP.md](ROADMAP.md)。
+
+当前阶段摘要：
+- **Phase 1（Week 1-2）**：IN_PROGRESS
+- **Phase 2（Week 3-4）**：NOT_STARTED
+- **Phase 3（Week 5-6）**：NOT_STARTED
+- **Phase 4（Week 7-8）**：NOT_STARTED
+
 ## 特性
 
 - 遵循 Python DB API 2.0 规范
