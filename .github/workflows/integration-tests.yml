@@ -61,7 +61,7 @@ jobs:
             tail -80 /tmp/dmpython-build.log
             exit 1
           fi
-          python scripts/prepare_dm_ci.py
+          PYTHONPATH="$PWD" python scripts/prepare_dm_ci.py
 
       - name: Run real-database regression
         timeout-minutes: 20

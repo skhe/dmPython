@@ -78,8 +78,32 @@ jobs:
           name: wheel-arm64-py${{ matrix.python-version }}
           path: dist_fixed/*.whl
 
+  ci-gate:
+    name: CI gate
+    needs: [real-dm, build]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      REAL_DM_RESULT: ${{ needs.real-dm.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+    steps:
+      - name: Require real database and applicable wheel checks
+        run: |
+          if [ "$REAL_DM_RESULT" != success ]; then
+            echo "::error::Real DM8 regression did not pass: $REAL_DM_RESULT"
+            exit 1
+          fi
+          if [ "$IS_FORK_PR" != true ] && [ "$BUILD_RESULT" != success ]; then
+            echo "::error::macOS wheel matrix did not pass: $BUILD_RESULT"
+            exit 1
+          fi
+          if [ "$IS_FORK_PR" = true ]; then
+            echo "::notice::macOS wheel matrix awaits a trusted branch with DPI headers."
+          fi
+
   release:
-    needs: [build, real-dm]
+    needs: [build, ci-gate]
     if: startsWith(github.ref, 'refs/tags/v') && vars.DMPYTHON_RELEASE_ENABLED == 'true'
     runs-on: macos-14
     permissions:
