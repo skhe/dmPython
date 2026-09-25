@@ -25,7 +25,7 @@
 - PR：GitHub 托管 ARM Linux runner 拉取摘要固定的社区开发镜像，启动临时数据库并执行 P0/P1；缺库、失败、跳过均不能通过。同仓库 PR 成功后构建五个 macOS ARM wheel；外部 fork PR 因拿不到 DPI 头文件 Secret 暂时只跑真实库，不把 wheel 视为已验证。
 - main、定时/手动完整回归：运行全部 `requires_dm` 用例，并校验 JUnit 报告非空、无失败和跳过。
 - 发布标签：`real-dm` 在真实库上执行全部 `requires_dm` 测试；只有它和五个 wheel 构建均通过，且 `DMPYTHON_RELEASE_ENABLED=true`，才创建 GitHub Release。PyPI 仍需单独建立可信发布流程，并以同样门槛约束。
-- 当前发布回归固定在 CPython 3.10；五个 Python 版本只完成了 wheel 安装/导入检查。真实库稳定后逐步扩展到 3.9–3.13，并记录不同 DM8 服务端版本的兼容结果。
+- 已在 CPython 3.9–3.13 上完成真实库全套回归；每个版本在 GitHub ARM 开发镜像和本机官方镜像均有 66 项通过的记录，详见[逐版本证据](../test-results/2026-09-25-five-python-release-rehearsal.md)。不同 DM8 服务端版本的兼容性仍需继续积累。
 - 本机 OrbStack 官方镜像仅用于开发和对照验证；CI 在托管 ARM Linux runner 内使用固定摘要的第三方开发镜像新建临时数据库，无需本机连通性。达梦下载域名对 GitHub runner 返回 HTTP 403，所以不能在托管 runner 上直接使用官方归档。macOS wheel 从既有仓库 Secret 取得 DPI 头文件；仓库不上传镜像或头文件。详见 [CI 说明](../ci.md)。
 
 ## 本轮进度和下一步
@@ -33,3 +33,4 @@
 - 已增加 `--require-dm`：没有选中真实库测试、缺连接参数或连不上数据库时，回归命令会失败。
 - 已让标签发布依赖真实库回归；许可未明确时发布变量默认关闭。
 - 已建隔离 ARM 数据库和非管理员账号；首轮本机完整回归 64 项通过，残留表数为 0。[证据与限制](../test-results/2026-09-25-orb-arm-baseline.md)。新增行为测试后，macOS ARM 本机 68 项通过；[GitHub 托管 ARM 完整回归](https://github.com/skhe/dmPython/actions/runs/36089633170) 66 项真实库用例通过，五个 macOS ARM wheel 构建和安装检查通过。发布仍等待 Go 驱动的分发权利明确。
+- 五版本[完整真实库回归](https://github.com/skhe/dmPython/actions/runs/36094943587)与[非公开发布演练](../test-results/2026-09-25-five-python-release-rehearsal.md)已完成；公开 GitHub Release 和 PyPI 上传继续等待 Go 驱动分发权利明确。

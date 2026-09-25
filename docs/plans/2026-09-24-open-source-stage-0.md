@@ -22,7 +22,7 @@
 ## 2. 支持边界
 
 - 预编译 wheel 的目标：macOS 14+、ARM64、CPython 3.9–3.13。`pyproject.toml` 与 `setup.py` 的 Python 约束保持一致。
-- 构建和导入通过，只证明该组合可安装并加载。完整 DB-API 行为、不同 DM8 服务端版本、SQLAlchemy/Django 兼容性需要另行以真实数据库测试记录证明。
+- 构建和导入通过，只证明该组合可安装并加载。CPython 3.9–3.13 的现有真实库用例已有[逐版本报告](../test-results/2026-09-25-five-python-release-rehearsal.md)；不同 DM8 服务端版本、SQLAlchemy/Django 兼容性仍需另行验证。
 - 项目暂按 Beta 标识。生产 SLA 和厂商认证不在当前承诺范围内。
 
 ## 3. 源码许可与附加组件
