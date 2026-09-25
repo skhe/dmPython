@@ -8,12 +8,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   real-dm:
     uses: ./.github/workflows/integration-tests.yml
 
   build:
     needs: real-dm
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -34,11 +38,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Fetch official DPI headers
+      - name: Decode DPI headers
+        env:
+          DPI_HEADERS_TAR_B64: ${{ secrets.DPI_HEADERS_TAR_B64 }}
         run: |
-          bash scripts/download_dm8_image.sh /tmp/dm8-arm.tar
-          python scripts/extract_dpi_headers.py /tmp/dm8-arm.tar dpi_include
-          rm /tmp/dm8-arm.tar
+          test -n "$DPI_HEADERS_TAR_B64"
+          mkdir -p dpi_include
+          printf '%s' "$DPI_HEADERS_TAR_B64" | base64 -d | tar xzf - -C dpi_include/
+          test -f dpi_include/DPI.h
 
       - name: Build Go bridge library
         run: |

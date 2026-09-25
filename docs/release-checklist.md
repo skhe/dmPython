@@ -4,10 +4,10 @@
 
 - [ ] Include the full Mulan PSL v2 text and preserve upstream notices; confirm the separately vendored Go driver's license or approved replacement and the resulting bridge binary (see [Stage 0](plans/2026-09-24-open-source-stage-0.md))
 - [ ] Confirm the isolated DM test account and full integration run are recorded; a CI skip is not a pass
-- [ ] Confirm the tag's `real-dm` job passed against the official DM8 container; startup, connection, test failure, or skip must fail the job
+- [ ] Confirm the tag's `real-dm` job passed against the pinned DM8 development container; startup, connection, test failure, or skip must fail the job
 - [ ] Set the GitHub repository variable `DMPYTHON_RELEASE_ENABLED=true` only after the Go component's distribution rights are documented; leave it unset while unresolved
 - [ ] Confirm the final sdist excludes local DPI headers and the final wheel contains only approved components
-- [ ] Confirm official DPI headers and the database image were not uploaded as workflow artifacts
+- [ ] Confirm DPI headers and the database image were not uploaded as workflow artifacts
 - [ ] Recheck PyPI project name and target version before any upload
 
 ## 1. Preflight

@@ -22,11 +22,11 @@
 
 ## CI 与发布门槛
 
-- PR：GitHub 托管 ARM Linux runner 下载达梦官方镜像，启动临时数据库并执行 P0/P1；成功后才构建五个 macOS ARM wheel。外部 fork PR 无需数据库凭据。缺库、失败、跳过均不能通过。
+- PR：GitHub 托管 ARM Linux runner 拉取摘要固定的社区开发镜像，启动临时数据库并执行 P0/P1；缺库、失败、跳过均不能通过。同仓库 PR 成功后构建五个 macOS ARM wheel；外部 fork PR 因拿不到 DPI 头文件 Secret 暂时只跑真实库，不把 wheel 视为已验证。
 - main、定时/手动完整回归：运行全部 `requires_dm` 用例，并校验 JUnit 报告非空、无失败和跳过。
 - 发布标签：`real-dm` 在真实库上执行全部 `requires_dm` 测试；只有它和五个 wheel 构建均通过，且 `DMPYTHON_RELEASE_ENABLED=true`，才创建 GitHub Release。PyPI 仍需单独建立可信发布流程，并以同样门槛约束。
 - 当前发布回归固定在 CPython 3.10；五个 Python 版本只完成了 wheel 安装/导入检查。真实库稳定后逐步扩展到 3.9–3.13，并记录不同 DM8 服务端版本的兼容结果。
-- 本机 OrbStack 数据库仅用于开发验证；CI 在托管 ARM Linux runner 内新建临时数据库，无需本机连通性。官方镜像及头文件由各 runner 从达梦域名直接取得，仓库不上传这些文件。详见 [CI 说明](../ci.md)。
+- 本机 OrbStack 官方镜像仅用于开发和对照验证；CI 在托管 ARM Linux runner 内使用固定摘要的第三方开发镜像新建临时数据库，无需本机连通性。达梦下载域名对 GitHub runner 返回 HTTP 403，所以不能在托管 runner 上直接使用官方归档。macOS wheel 从既有仓库 Secret 取得 DPI 头文件；仓库不上传镜像或头文件。详见 [CI 说明](../ci.md)。
 
 ## 本轮进度和下一步
 
