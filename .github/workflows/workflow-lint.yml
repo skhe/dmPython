@@ -22,7 +22,7 @@ jobs:
       - name: Install lint dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyyaml build twine
+          python -m pip install pyyaml build twine pytest
 
       - name: Parse workflow YAML files
         run: |
@@ -42,6 +42,10 @@ jobs:
       - name: Check roadmap status consistency
         run: |
           python scripts/check_roadmap_status.py
+
+      - name: Check release bundle validation
+        run: |
+          python -m pytest -q scripts/tests/test_release_assets.py
 
       - name: Packaging metadata check (sdist)
         run: |

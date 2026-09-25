@@ -11,9 +11,13 @@ permissions:
 
 jobs:
   real-dm-arm:
-    name: Real DM8 / ARM Linux
+    name: Real DM8 / ARM Linux / Python ${{ matrix.python-version }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +28,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
 
       - name: Pull pinned ARM DM8 development image
         run: |
@@ -79,10 +83,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: real-dm-arm-regression
+          name: real-dm-arm-py${{ matrix.python-version }}
           path: |
             pytest-dm.xml
             trend-dm.json
+            dm-ci-environment.json
           if-no-files-found: ignore
 
       - name: Show database logs on failure
