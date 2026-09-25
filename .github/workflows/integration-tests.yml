@@ -60,7 +60,7 @@ jobs:
 
       - name: Build driver and create test account
         run: |
-          python -m pip install pytest pytest-timeout
+          python -m pip install setuptools wheel pytest pytest-timeout
           if ! python setup.py build_ext --inplace > /tmp/dmpython-build.log 2>&1; then
             tail -80 /tmp/dmpython-build.log
             exit 1

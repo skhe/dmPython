@@ -13,8 +13,8 @@ if [[ -n "$TAG_NAME" ]]; then
 fi
 
 echo "[INFO] install preflight dependencies"
-if ! python3 -c 'import yaml, build, delocate, twine' >/dev/null 2>&1; then
-  python3 -m pip install --quiet pyyaml build delocate twine
+if ! python3 -c 'import yaml, build, delocate, twine, setuptools, wheel' >/dev/null 2>&1; then
+  python3 -m pip install --quiet pyyaml build delocate twine setuptools wheel
 fi
 
 echo "[INFO] workflow YAML syntax"
@@ -33,10 +33,10 @@ echo "[INFO] preflight output: $OUTPUT_DIR"
 
 echo "[INFO] build wheel"
 MACOSX_DEPLOYMENT_TARGET=14.0 _PYTHON_HOST_PLATFORM=macosx-14.0-arm64 \
-  python3 -m build --wheel --outdir "$OUTPUT_DIR/wheels"
+  python3 -m build --wheel --no-isolation --outdir "$OUTPUT_DIR/wheels"
 
 echo "[INFO] build and check source archive"
-python3 -m build --sdist --outdir "$OUTPUT_DIR/sdist"
+python3 -m build --sdist --no-isolation --outdir "$OUTPUT_DIR/sdist"
 python3 -m twine check "$OUTPUT_DIR"/sdist/*.tar.gz
 python3 scripts/check_sdist_contents.py "$OUTPUT_DIR"/sdist/*.tar.gz
 
