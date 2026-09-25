@@ -112,15 +112,16 @@ def test_lob_null_vs_empty_contract(conn, table_name_factory, drop_table):
 def test_lob_error_path_after_close_no_segfault_subprocess(run_in_subprocess):
     code = textwrap.dedent(
         """
+        import os
         import uuid
         import dmPython
 
         table = "DMPY_P0_CLOSE_" + uuid.uuid4().hex[:8].upper()
         conn = dmPython.connect(
-            user="SYSDBA",
-            password="SYSDBA001",
-            server="localhost",
-            port=5237,
+            user=os.environ["DM_TEST_USER"],
+            password=os.environ["DM_TEST_PASSWORD"],
+            server=os.environ["DM_TEST_HOST"],
+            port=int(os.environ["DM_TEST_PORT"]),
         )
         cur = conn.cursor()
         try:

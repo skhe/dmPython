@@ -36,12 +36,19 @@ def _make_blob(size: int) -> bytes:
 def test_connection_close_race_during_fetch_no_crash(run_in_subprocess):
     code = textwrap.dedent(
         """
+        import os
         import threading
         import uuid
         import dmPython
 
         table = "DMPY_P2_RACE_" + uuid.uuid4().hex[:8].upper()
-        conn = dmPython.connect(user="SYSDBA", password="SYSDBA001", server="localhost", port=5237)
+        params = {
+            "user": os.environ["DM_TEST_USER"],
+            "password": os.environ["DM_TEST_PASSWORD"],
+            "server": os.environ["DM_TEST_HOST"],
+            "port": int(os.environ["DM_TEST_PORT"]),
+        }
+        conn = dmPython.connect(**params)
         cur = conn.cursor()
         cur.execute(f"CREATE TABLE {table} (id INT PRIMARY KEY, v VARCHAR(64))")
         cur.executemany(f"INSERT INTO {table} (id, v) VALUES (?, ?)", [(i, f"v{i}") for i in range(1, 2001)])
@@ -80,7 +87,7 @@ def test_connection_close_race_during_fetch_no_crash(run_in_subprocess):
         t2.join()
 
         try:
-            cur2 = dmPython.connect(user="SYSDBA", password="SYSDBA001", server="localhost", port=5237).cursor()
+            cur2 = dmPython.connect(**params).cursor()
             cur2.execute(f"DROP TABLE {table}")
             cur2.connection.commit()
             cur2.close()

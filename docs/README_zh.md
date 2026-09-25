@@ -19,7 +19,7 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 
 ## 支持策略
 
-- **Supported（支持）**：macOS ARM64 以及本仓库 CI/集成测试已覆盖的场景。
+- **构建支持范围**：macOS 14+ ARM64、CPython 3.9–3.13。数据库行为仅以已有集成测试证据为准。
 - **Best-effort（尽力支持）**：尚未纳入 CI 覆盖的扩展使用场景。
 - **Not guaranteed（不保证）**：生产 SLA 承诺、厂商认证兼容性与闭源组件支持协议。
 
@@ -27,9 +27,13 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 
 总体提升路线图与阶段状态维护在 [docs/ROADMAP.md](ROADMAP.md)。
 
+面向 PyPI 开源发布的[阶段 0](plans/2026-09-24-open-source-stage-0.md)记录内置 Go 驱动的许可核查和隔离测试环境的前置门槛。
+
+[CI 与真实库回归](ci.md)说明官方 DM8 ARM 测试和 macOS wheel 构建流程。
+
 当前阶段摘要：
 - **Phase 1（Week 1-2）**：DONE
-- **Phase 2（Week 3-4）**：NOT_STARTED
+- **Phase 2（Week 3-4）**：IN_PROGRESS
 - **Phase 3（Week 5-6）**：NOT_STARTED
 - **Phase 4（Week 7-8）**：NOT_STARTED
 
@@ -132,7 +136,7 @@ dmPython/
 
 ## 许可证
 
-本项目采用 [木兰宽松许可证 第2版（Mulan PSL v2）](http://license.coscl.org.cn/MulanPSL2) 授权。
+上游 dmPython 源码采用[木兰宽松许可证 第2版（Mulan PSL v2）](https://github.com/DamengDB/dmPython/blob/main/LICENSE)。额外内置的 Go 驱动许可证仍待核实，公开发布构建产物前请参阅[阶段 0](plans/2026-09-24-open-source-stage-0.md)。
 
 ---
 

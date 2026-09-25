@@ -1,9 +1,6 @@
 """Integration tests for dmPython against a running DM database.
 
-Defaults target a local Docker container:
-  host=localhost, port=5237, user=SYSDBA, password=SYSDBA001
-Override with environment variables:
-  DM_TEST_HOST, DM_TEST_PORT, DM_TEST_USER, DM_TEST_PASSWORD
+Requires DM_TEST_HOST, DM_TEST_PORT, DM_TEST_USER, and DM_TEST_PASSWORD.
 """
 
 from __future__ import annotations
@@ -22,10 +19,10 @@ pytestmark = [pytest.mark.requires_dm]
 
 def _conn_params() -> dict[str, object]:
     return {
-        "user": os.getenv("DM_TEST_USER", "SYSDBA"),
-        "password": os.getenv("DM_TEST_PASSWORD", "SYSDBA001"),
-        "server": os.getenv("DM_TEST_HOST", "localhost"),
-        "port": int(os.getenv("DM_TEST_PORT", "5237")),
+        "user": os.environ["DM_TEST_USER"],
+        "password": os.environ["DM_TEST_PASSWORD"],
+        "server": os.environ["DM_TEST_HOST"],
+        "port": int(os.environ["DM_TEST_PORT"]),
     }
 
 

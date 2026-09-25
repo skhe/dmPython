@@ -2,6 +2,8 @@
 
 This document is the single source of truth (SSOT) for the project-level improvement roadmap and phase status.
 
+The 2026Q4 open-source publishing track starts with [Stage 0: scope and release prerequisites](plans/2026-09-24-open-source-stage-0.md). It is tracked separately from the four historical phases below until its external authorization and test environment gates are satisfied.
+
 ## Status Legend
 
 - `NOT_STARTED`: Planned but not started.
@@ -14,7 +16,7 @@ This document is the single source of truth (SSOT) for the project-level improve
 | Phase | Window | Status | Owner | Exit Criteria | Last Updated | Evidence Links |
 | --- | --- | --- | --- | --- | --- | --- |
 | Phase 1 | Week 1-2 | DONE | Maintainers | README/README_zh positioning updated, ROADMAP established, roadmap status check wired into CI | 2026-09-24 | [64152ae](https://github.com/skhe/dmPython/commit/64152ae) · [lint](https://github.com/skhe/dmPython/actions/runs/36018070212) · [wheels](https://github.com/skhe/dmPython/actions/runs/36018069837) |
-| Phase 2 | Week 3-4 | NOT_STARTED | Maintainers | `requires_dm` regression green, no crash/139, P0/P1 contract coverage strengthened | 2026-03-04 | - |
+| Phase 2 | Week 3-4 | IN_PROGRESS | Maintainers | `requires_dm` regression green, no crash/139, P0/P1 contract coverage strengthened | 2026-09-25 | [Local ARM baseline](test-results/2026-09-25-orb-arm-baseline.md) |
 | Phase 3 | Week 5-6 | NOT_STARTED | Maintainers | Release preflight and asset verification stable, tag release idempotency remains green | 2026-03-04 | - |
 | Phase 4 | Week 7-8 | NOT_STARTED | Maintainers | Third-party patch drift guard and upstream sync governance are documented and enforced | 2026-03-04 | - |
 

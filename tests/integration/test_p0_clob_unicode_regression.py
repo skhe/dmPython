@@ -129,10 +129,10 @@ def test_clob_unicode_problem_patterns_subprocess_no_crash(run_in_subprocess):
             return (base * ((size // len(base)) + 2))[:size]
 
         conn = dmPython.connect(
-            user=os.getenv("DM_TEST_USER", "SYSDBA"),
-            password=os.getenv("DM_TEST_PASSWORD", "SYSDBA001"),
-            server=os.getenv("DM_TEST_HOST", "localhost"),
-            port=int(os.getenv("DM_TEST_PORT", "5237")),
+            user=os.environ["DM_TEST_USER"],
+            password=os.environ["DM_TEST_PASSWORD"],
+            server=os.environ["DM_TEST_HOST"],
+            port=int(os.environ["DM_TEST_PORT"]),
         )
         cur = conn.cursor()
         table = "DMPY_P0_CLOBSP_" + uuid.uuid4().hex[:8].upper()

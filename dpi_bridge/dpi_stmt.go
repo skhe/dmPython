@@ -24,9 +24,12 @@ typedef dhandle         dhdesc;
 import "C"
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"unsafe"
+
+	dm "gitee.com/chunanyong/dm"
 )
 
 // columnInfo holds metadata about a result set column.
@@ -87,8 +90,8 @@ type stmtHandle struct {
 	columnCount int16
 
 	// Cached result rows (pre-fetched for accurate row count)
-	cachedRows  [][]interface{} // all rows, each row is []interface{}
-	fetchPos    int             // current position in cachedRows for dpi_fetch
+	cachedRows [][]interface{} // all rows, each row is []interface{}
+	fetchPos   int             // current position in cachedRows for dpi_fetch
 
 	// Parameters
 	params     []paramInfo
@@ -712,8 +715,13 @@ func diagFromError(err error) *diagInfo {
 	if err == nil {
 		return nil
 	}
+	code := int32(-1)
+	var dmErr *dm.DmError
+	if errors.As(err, &dmErr) {
+		code = dmErr.ErrCode
+	}
 	return &diagInfo{
-		errorCode: -1,
+		errorCode: code,
 		message:   err.Error(),
 	}
 }

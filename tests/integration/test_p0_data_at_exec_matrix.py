@@ -139,15 +139,16 @@ def test_data_at_exec_subprocess_no_segfault_matrix(run_in_subprocess, boundary_
     code = textwrap.dedent(
         f"""
         import dmPython
+        import os
         import uuid
 
         sizes = {boundary_sizes!r}
         table = "DMPY_P0_DE_SP_" + uuid.uuid4().hex[:8].upper()
         conn = dmPython.connect(
-            user="SYSDBA",
-            password="SYSDBA001",
-            server="localhost",
-            port=5237,
+            user=os.environ["DM_TEST_USER"],
+            password=os.environ["DM_TEST_PASSWORD"],
+            server=os.environ["DM_TEST_HOST"],
+            port=int(os.environ["DM_TEST_PORT"]),
         )
         cur = conn.cursor()
         try:
