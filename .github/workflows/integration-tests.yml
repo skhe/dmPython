@@ -1,16 +1,19 @@
 name: Integration Tests
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+  workflow_call:
   schedule:
     - cron: "0 18 * * *"
 
+permissions:
+  contents: read
+
 jobs:
-  pr-lightweight:
-    if: github.event_name == 'pull_request'
-    runs-on: macos-14
+  real-dm-arm:
+    name: Real DM8 / ARM Linux
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -23,145 +26,65 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Check DM secrets availability
-        id: dm_ready
+      - name: Pull pinned ARM DM8 development image
         run: |
-          if [ -n "${{ secrets.DM_TEST_HOST }}" ] && [ -n "${{ secrets.DM_TEST_PORT }}" ] && [ -n "${{ secrets.DM_TEST_USER }}" ] && [ -n "${{ secrets.DM_TEST_PASSWORD }}" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          docker pull --platform linux/arm64 \
+            yhl452493373/dm8@sha256:5b9d23c04b148d5765d6077d95b64032be64daedabeef9cddc7a4216b9ad0a1a
 
-      - name: Decode DPI headers
-        if: steps.dm_ready.outputs.available == 'true'
-        env:
-          DPI_HEADERS_TAR_B64: ${{ secrets.DPI_HEADERS_TAR_B64 }}
+      - name: Start isolated DM8 and extract build headers
         run: |
+          admin_password="DmPyA1$(openssl rand -hex 12)"
+          test_password="DmPyA1$(openssl rand -hex 12)"
+          echo "::add-mask::$admin_password"
+          echo "::add-mask::$test_password"
+          {
+            echo "DM_CI_ADMIN_PASSWORD=$admin_password"
+            echo "DM_TEST_PASSWORD=$test_password"
+            echo 'DM_TEST_USER=DMPYTEST'
+            echo 'DM_TEST_HOST=127.0.0.1'
+            echo 'DM_TEST_PORT=15236'
+          } >> "$GITHUB_ENV"
+          docker run -d --user root --name dmpython-ci-dm8 \
+            -e SYSDBA_PWD="$admin_password" \
+            -e SYSAUDITOR_PWD="$admin_password" \
+            -e CHARSET=1 -e DB_NAME=DMPYTEST -e INSTANCE_NAME=DMPYTEST \
+            -p 127.0.0.1:15236:5236 \
+            yhl452493373/dm8@sha256:5b9d23c04b148d5765d6077d95b64032be64daedabeef9cddc7a4216b9ad0a1a
           mkdir -p dpi_include
-          echo "$DPI_HEADERS_TAR_B64" | base64 -d | tar xzf - -C dpi_include/
+          docker cp dmpython-ci-dm8:/opt/dmdbms/drivers/dpi/include/. dpi_include/
+          test -f dpi_include/DPI.h
 
-      - name: Build Go bridge library
-        if: steps.dm_ready.outputs.available == 'true'
+      - name: Build driver and create test account
         run: |
-          cd dpi_bridge && go build -buildmode=c-shared -o libdmdpi.dylib .
-          install_name_tool -id @rpath/libdmdpi.dylib libdmdpi.dylib
+          python -m pip install pytest pytest-timeout
+          if ! python setup.py build_ext --inplace > /tmp/dmpython-build.log 2>&1; then
+            tail -80 /tmp/dmpython-build.log
+            exit 1
+          fi
+          PYTHONPATH="$PWD" python scripts/prepare_dm_ci.py
 
-      - name: Build extension and run P0/P1
-        if: steps.dm_ready.outputs.available == 'true'
-        env:
-          DYLD_LIBRARY_PATH: ${{ github.workspace }}/dpi_bridge
-          DM_TEST_HOST: ${{ secrets.DM_TEST_HOST }}
-          DM_TEST_PORT: ${{ secrets.DM_TEST_PORT }}
-          DM_TEST_USER: ${{ secrets.DM_TEST_USER }}
-          DM_TEST_PASSWORD: ${{ secrets.DM_TEST_PASSWORD }}
-          DM_TEST_BOUNDARY_SIZES: ${{ secrets.DM_TEST_BOUNDARY_SIZES }}
+      - name: Run real-database regression
+        timeout-minutes: 20
         run: |
-          python -m pip install pytest pytest-timeout pytest-cov
-          python setup.py build_ext --inplace
-          python -m pytest -q tests/integration -m "p0_stability or p1_contract" --junitxml=pytest-pr.xml --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            python -m pytest -q --require-dm tests/integration \
+              -m 'p0_stability or p1_contract' --junitxml=pytest-dm.xml
+          else
+            python -m pytest -q --require-dm -m requires_dm tests \
+              --junitxml=pytest-dm.xml
+          fi
+          python scripts/summarize_junit.py pytest-dm.xml --output trend-dm.json
 
-      - name: Upload coverage report (PR)
-        if: steps.dm_ready.outputs.available == 'true'
+      - name: Upload regression evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-pr
+          name: real-dm-arm-regression
           path: |
-            coverage.xml
-            pytest-pr.xml
+            pytest-dm.xml
+            trend-dm.json
+          if-no-files-found: ignore
 
-      - name: Skip lightweight integration tests
-        if: steps.dm_ready.outputs.available != 'true'
-        run: |
-          echo "::notice::SKIP_DM_INTEGRATION: PR integration tests are skipped because DM secrets are not configured."
-
-  full-regression:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.21"
-          cache-dependency-path: dpi_bridge/go.sum
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Check DM secrets availability
-        id: dm_ready
-        run: |
-          if [ -n "${{ secrets.DM_TEST_HOST }}" ] && [ -n "${{ secrets.DM_TEST_PORT }}" ] && [ -n "${{ secrets.DM_TEST_USER }}" ] && [ -n "${{ secrets.DM_TEST_PASSWORD }}" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Decode DPI headers
-        if: steps.dm_ready.outputs.available == 'true'
-        env:
-          DPI_HEADERS_TAR_B64: ${{ secrets.DPI_HEADERS_TAR_B64 }}
-        run: |
-          mkdir -p dpi_include
-          echo "$DPI_HEADERS_TAR_B64" | base64 -d | tar xzf - -C dpi_include/
-
-      - name: Build Go bridge library
-        if: steps.dm_ready.outputs.available == 'true'
-        run: |
-          cd dpi_bridge && go build -buildmode=c-shared -o libdmdpi.dylib .
-          install_name_tool -id @rpath/libdmdpi.dylib libdmdpi.dylib
-
-      - name: Build extension and run P0/P1/P2
-        if: steps.dm_ready.outputs.available == 'true'
-        env:
-          DYLD_LIBRARY_PATH: ${{ github.workspace }}/dpi_bridge
-          DM_TEST_HOST: ${{ secrets.DM_TEST_HOST }}
-          DM_TEST_PORT: ${{ secrets.DM_TEST_PORT }}
-          DM_TEST_USER: ${{ secrets.DM_TEST_USER }}
-          DM_TEST_PASSWORD: ${{ secrets.DM_TEST_PASSWORD }}
-          DM_TEST_BOUNDARY_SIZES: ${{ secrets.DM_TEST_BOUNDARY_SIZES }}
-          DM_TEST_STRESS_ROWS: ${{ secrets.DM_TEST_STRESS_ROWS }}
-          DM_TEST_STRESS_WORKERS: ${{ secrets.DM_TEST_STRESS_WORKERS }}
-          DM_TEST_CHURN_LOOPS: ${{ secrets.DM_TEST_CHURN_LOOPS }}
-          DM_TEST_GC_LOOPS: ${{ secrets.DM_TEST_GC_LOOPS }}
-        run: |
-          python -m pip install pytest pytest-timeout pytest-cov
-          python setup.py build_ext --inplace
-          start_ts=$(date +%s)
-          python -m pytest -q tests/integration -m "p0_stability or p1_contract or p2_scale" --junitxml=pytest-full.xml --cov=. --cov-report=term-missing --cov-report=xml:coverage.xml
-          end_ts=$(date +%s)
-          duration=$((end_ts - start_ts))
-          python - <<PY
-          import json
-          import xml.etree.ElementTree as ET
-
-          root = ET.parse("pytest-full.xml").getroot()
-          attrs = root.attrib
-          trend = {
-              "tests": int(float(attrs.get("tests", "0"))),
-              "failures": int(float(attrs.get("failures", "0"))),
-              "errors": int(float(attrs.get("errors", "0"))),
-              "skipped": int(float(attrs.get("skipped", "0"))),
-              "pytest_reported_seconds": float(attrs.get("time", "0")),
-              "wall_clock_seconds": int(${duration}),
-          }
-          with open("trend-full-regression.json", "w", encoding="utf-8") as f:
-              json.dump(trend, f, indent=2, ensure_ascii=False)
-          print(trend)
-          PY
-
-      - name: Upload coverage report (full)
-        if: steps.dm_ready.outputs.available == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-full
-          path: |
-            coverage.xml
-            pytest-full.xml
-            trend-full-regression.json
-
-      - name: Skip full integration tests
-        if: steps.dm_ready.outputs.available != 'true'
-        run: |
-          echo "::notice::SKIP_DM_INTEGRATION: Full regression is skipped because DM secrets are not configured."
+      - name: Show database logs on failure
+        if: failure()
+        run: docker logs --tail 80 dmpython-ci-dm8 || true

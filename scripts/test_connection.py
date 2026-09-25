@@ -12,19 +12,20 @@
 import sys
 import traceback
 import os
+import uuid
 from pathlib import Path
 
 import dmPython
 
-# 连接参数 — docker 容器 dm8_test 映射到宿主机 5237
+# 连接参数必须指向隔离测试库。
 CONN_PARAMS = {
-    "user": os.getenv("DM_TEST_USER", "SYSDBA"),
-    "password": os.getenv("DM_TEST_PASSWORD", "SYSDBA001"),
-    "server": os.getenv("DM_TEST_HOST", "localhost"),
-    "port": int(os.getenv("DM_TEST_PORT", "5237")),
+    "user": os.getenv("DM_TEST_USER"),
+    "password": os.getenv("DM_TEST_PASSWORD"),
+    "server": os.getenv("DM_TEST_HOST"),
+    "port": os.getenv("DM_TEST_PORT"),
 }
 
-TEST_TABLE = "DMPYTHON_TEST_TBL"
+TEST_TABLE = f"DMPY_TEST_{uuid.uuid4().hex[:10].upper()}"
 passed = 0
 failed = 0
 
@@ -202,6 +203,13 @@ def test_connection_attributes():
 
 
 def main():
+    required = ("DM_TEST_HOST", "DM_TEST_PORT", "DM_TEST_USER", "DM_TEST_PASSWORD")
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        print(f"缺少测试库配置: {', '.join(missing)}")
+        return 2
+    CONN_PARAMS["port"] = int(CONN_PARAMS["port"])
+
     print(f"dmPython version: {dmPython.version}")
     print(f"Python: {sys.executable}")
     print(f"连接: {CONN_PARAMS['server']}:{CONN_PARAMS['port']}")

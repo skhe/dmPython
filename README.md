@@ -17,7 +17,7 @@ For production environments, prefer the official [DamengDB/dmPython](https://git
 
 ## Support Policy
 
-- **Supported**: macOS ARM64 and scenarios covered by this repository's CI and integration test matrix.
+- **Supported build targets**: macOS 14+ ARM64 with CPython 3.9–3.13. Database behavior is supported only where integration tests have evidence.
 - **Best-effort**: Extended scenarios not currently covered by CI.
 - **Not guaranteed**: Production SLA commitments, vendor-certified compatibility guarantees, and closed-source component support contracts.
 
@@ -25,9 +25,13 @@ For production environments, prefer the official [DamengDB/dmPython](https://git
 
 The long-term improvement roadmap and phase status are maintained in [docs/ROADMAP.md](docs/ROADMAP.md).
 
+The [open-source publishing Stage 0](docs/plans/2026-09-24-open-source-stage-0.md) records the distribution and test-environment gates before PyPI publishing.
+
+[CI and real-database regression](docs/ci.md) describes the official DM8 ARM test job and macOS wheel checks.
+
 Current phase snapshot:
 - **Phase 1 (Week 1-2)**: DONE
-- **Phase 2 (Week 3-4)**: NOT_STARTED
+- **Phase 2 (Week 3-4)**: DONE
 - **Phase 3 (Week 5-6)**: NOT_STARTED
 - **Phase 4 (Week 7-8)**: NOT_STARTED
 
@@ -123,7 +127,7 @@ dmPython/
 
 ## License
 
-Licensed under [Mulan PSL v2](http://license.coscl.org.cn/MulanPSL2).
+The upstream dmPython source is licensed under [Mulan PSL v2](https://github.com/DamengDB/dmPython/blob/main/LICENSE). The separately vendored Go driver's license remains to be verified; see [Stage 0](docs/plans/2026-09-24-open-source-stage-0.md) before publishing artifacts.
 
 ---
 

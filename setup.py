@@ -110,19 +110,20 @@ class build_ext(_build_ext):
         super().run()
 
     def _build_go_bridge(self):
-        dylib_path = os.path.join(DPI_BRIDGE_DIR, "libdmdpi.dylib")
+        library_name = "libdmdpi.dylib" if sys.platform == "darwin" else "libdmdpi.so"
+        library_path = os.path.join(DPI_BRIDGE_DIR, library_name)
 
         # Check if Go is available
         try:
             subprocess.check_output(["go", "version"], stderr=subprocess.STDOUT)
         except (FileNotFoundError, subprocess.CalledProcessError):
-            if os.path.exists(dylib_path):
-                print("Go not found, using pre-built libdmdpi.dylib")
+            if os.path.exists(library_path):
+                print(f"Go not found, using pre-built {library_name}")
                 return
             raise RuntimeError(
                 "Go toolchain is required to build the DPI bridge library. "
                 "Install Go from https://go.dev/dl/ or set DMPYTHON_SKIP_GO_BUILD=1 "
-                "if you have a pre-built libdmdpi.dylib in dpi_bridge/"
+                f"if you have a pre-built {library_name} in dpi_bridge/"
             )
 
         print("Building Go DPI bridge library...")
@@ -130,20 +131,16 @@ class build_ext(_build_ext):
             [
                 "go", "build",
                 "-buildmode=c-shared",
-                "-o", "libdmdpi.dylib",
+                "-o", library_name,
                 ".",
             ],
             cwd=DPI_BRIDGE_DIR,
         )
 
-        # Set install_name so delocate and @rpath work correctly
-        subprocess.check_call(
-            [
-                "install_name_tool",
-                "-id", "@rpath/libdmdpi.dylib",
-                dylib_path,
-            ]
-        )
+        if sys.platform == "darwin":
+            subprocess.check_call(
+                ["install_name_tool", "-id", "@rpath/libdmdpi.dylib", library_path]
+            )
         print("Go DPI bridge library built successfully.")
 
 
@@ -154,7 +151,7 @@ extension = Extension(
     library_dirs=[DPI_BRIDGE_DIR],
     libraries=["dmdpi"],
     define_macros=define_macros,
-    extra_link_args=["-Wl,-rpath,@loader_path"],
+    extra_link_args=["-Wl,-rpath,@loader_path" if sys.platform == "darwin" else "-Wl,-rpath,$ORIGIN/dpi_bridge"],
 )
 
 setup(
@@ -176,9 +173,9 @@ setup(
     cmdclass={"build_ext": build_ext},
     keywords="Dameng DM8 database DB-API",
     license="MulanPSL-2.0",
-    python_requires=">=3.8",
+    python_requires=">=3.9,<3.14",
     classifiers=[
-        "Development Status :: 5 - Production/Stable",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Natural Language :: English",
         "Operating System :: MacOS :: MacOS X",

@@ -3,7 +3,7 @@
 ## 支持矩阵
 
 - Python: 3.9 - 3.13
-- 平台（本仓库发布目标）: macOS ARM64
+- 平台（本仓库发布目标）: macOS 14+ ARM64
 
 > 说明：本项目是官方 `dmPython` 的 macOS ARM64 社区 fork。Linux/Windows 生产环境请优先评估官方发布版本。
 
@@ -20,7 +20,7 @@ pip install dmPython_macOS-<version>-cp312-cp312-macosx_14_0_arm64.whl
 前置条件：
 
 - Go 1.21+
-- Python 3.9+
+- Python 3.9 - 3.13
 - DPI 头文件（放在 `dpi_include/` 或设置 `DM_HOME`）
 
 ```bash

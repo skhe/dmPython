@@ -2195,6 +2195,21 @@ Cursor_Execute_inner(
             goto fun_end;
         }
 
+        if (!is_many && !from_call &&
+            (executeArgs == NULL || PySequence_Check(executeArgs)))
+        {
+            Py_ssize_t supplied = executeArgs ? PySequence_Size(executeArgs) : 0;
+            if (supplied < 0)
+                goto fun_end;
+            if (supplied != self->paramCount)
+            {
+                PyErr_Format(g_ProgrammingErrorException,
+                             "Expected %d parameters, got %zd",
+                             self->paramCount, supplied);
+                goto fun_end;
+            }
+        }
+
         // perform binds
         if (Cursor_PerformBind(self, executeArgs, is_many, &rowsize) < 0)
         {

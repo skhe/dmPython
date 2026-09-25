@@ -18,14 +18,49 @@ DYLIB_DIR = ROOT_DIR / "dpi_bridge"
 _DM_AVAILABLE: bool | None = None
 _DM_ERROR: str | None = None
 _DEFAULT_BOUNDARY_SIZES = "0,1,2,255,256,1023,1024,2047,2048,4095,4096,4097,8191,8192,8193,16384"
+_REQUIRED_DM_ENV = ("DM_TEST_HOST", "DM_TEST_PORT", "DM_TEST_USER", "DM_TEST_PASSWORD")
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--require-dm",
+        action="store_true",
+        help="Fail if real-DM tests are not selected or the test database is unavailable",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    global _DM_AVAILABLE, _DM_ERROR
+
+    if not config.getoption("--require-dm"):
+        return
+    if not any(item.get_closest_marker("requires_dm") for item in items):
+        raise pytest.UsageError("--require-dm selected no real-DM tests")
+
+    missing = [name for name in _REQUIRED_DM_ENV if not os.getenv(name)]
+    if missing:
+        raise pytest.UsageError(f"--require-dm needs {', '.join(missing)}")
+
+    _DM_AVAILABLE, _DM_ERROR = _probe_dm()
+    if not _DM_AVAILABLE:
+        raise pytest.UsageError("--require-dm could not connect to the test database")
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    if not session.config.getoption("--require-dm"):
+        return
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None and reporter.stats.get("skipped"):
+        reporter.write_line("--require-dm forbids skipped tests", red=True)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 def dm_conn_params() -> dict[str, object]:
     return {
-        "user": os.getenv("DM_TEST_USER", "SYSDBA"),
-        "password": os.getenv("DM_TEST_PASSWORD", "SYSDBA001"),
-        "server": os.getenv("DM_TEST_HOST", "localhost"),
-        "port": int(os.getenv("DM_TEST_PORT", "5237")),
+        "user": os.environ["DM_TEST_USER"],
+        "password": os.environ["DM_TEST_PASSWORD"],
+        "server": os.environ["DM_TEST_HOST"],
+        "port": int(os.environ["DM_TEST_PORT"]),
     }
 
 
@@ -50,7 +85,11 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         return
 
     if _DM_AVAILABLE is None:
-        _DM_AVAILABLE, _DM_ERROR = _probe_dm()
+        missing = [name for name in _REQUIRED_DM_ENV if not os.getenv(name)]
+        if missing:
+            _DM_AVAILABLE, _DM_ERROR = False, f"missing {', '.join(missing)}"
+        else:
+            _DM_AVAILABLE, _DM_ERROR = _probe_dm()
 
     if not _DM_AVAILABLE:
         pytest.skip(f"DM not available: {_DM_ERROR}")

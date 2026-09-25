@@ -20,15 +20,16 @@ def _assert_subprocess_ok(result, label: str) -> None:
 def test_lob_clob_roundtrip_no_crash(run_in_subprocess):
     code = textwrap.dedent(
         """
+        import os
         import uuid
         import dmPython
 
         table = "DMPY_CLOB_" + uuid.uuid4().hex[:8].upper()
         conn = dmPython.connect(
-            user="SYSDBA",
-            password="SYSDBA001",
-            server="localhost",
-            port=5237,
+            user=os.environ["DM_TEST_USER"],
+            password=os.environ["DM_TEST_PASSWORD"],
+            server=os.environ["DM_TEST_HOST"],
+            port=int(os.environ["DM_TEST_PORT"]),
         )
         cur = conn.cursor()
         try:
@@ -60,15 +61,16 @@ def test_lob_clob_roundtrip_no_crash(run_in_subprocess):
 def test_lob_blob_roundtrip_no_crash(run_in_subprocess):
     code = textwrap.dedent(
         """
+        import os
         import uuid
         import dmPython
 
         table = "DMPY_BLOB_" + uuid.uuid4().hex[:8].upper()
         conn = dmPython.connect(
-            user="SYSDBA",
-            password="SYSDBA001",
-            server="localhost",
-            port=5237,
+            user=os.environ["DM_TEST_USER"],
+            password=os.environ["DM_TEST_PASSWORD"],
+            server=os.environ["DM_TEST_HOST"],
+            port=int(os.environ["DM_TEST_PORT"]),
         )
         cur = conn.cursor()
         try:
@@ -101,15 +103,16 @@ def test_lob_error_path_no_segfault_subprocess(run_in_subprocess):
     code = textwrap.dedent(
         """
         import gc
+        import os
         import uuid
         import dmPython
 
         table = "DMPY_LERR_" + uuid.uuid4().hex[:8].upper()
         conn = dmPython.connect(
-            user="SYSDBA",
-            password="SYSDBA001",
-            server="localhost",
-            port=5237,
+            user=os.environ["DM_TEST_USER"],
+            password=os.environ["DM_TEST_PASSWORD"],
+            server=os.environ["DM_TEST_HOST"],
+            port=int(os.environ["DM_TEST_PORT"]),
         )
         cur = conn.cursor()
         try:
