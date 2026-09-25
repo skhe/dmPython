@@ -16,7 +16,7 @@ The 2026Q4 open-source publishing track starts with [Stage 0: scope and release 
 | Phase | Window | Status | Owner | Exit Criteria | Last Updated | Evidence Links |
 | --- | --- | --- | --- | --- | --- | --- |
 | Phase 1 | Week 1-2 | DONE | Maintainers | README/README_zh positioning updated, ROADMAP established, roadmap status check wired into CI | 2026-09-24 | [64152ae](https://github.com/skhe/dmPython/commit/64152ae) · [lint](https://github.com/skhe/dmPython/actions/runs/36018070212) · [wheels](https://github.com/skhe/dmPython/actions/runs/36018069837) |
-| Phase 2 | Week 3-4 | IN_PROGRESS | Maintainers | `requires_dm` regression green, no crash/139, P0/P1 contract coverage strengthened | 2026-09-25 | [Local ARM baseline](test-results/2026-09-25-orb-arm-baseline.md) |
+| Phase 2 | Week 3-4 | DONE | Maintainers | `requires_dm` regression green, no crash/139, P0/P1 contract coverage strengthened | 2026-09-25 | [GitHub full regression](https://github.com/skhe/dmPython/actions/runs/36089236861) · [GitHub PR gate](https://github.com/skhe/dmPython/actions/runs/36089025280) · [Local baseline](test-results/2026-09-25-orb-arm-baseline.md) |
 | Phase 3 | Week 5-6 | NOT_STARTED | Maintainers | Release preflight and asset verification stable, tag release idempotency remains green | 2026-03-04 | - |
 | Phase 4 | Week 7-8 | NOT_STARTED | Maintainers | Third-party patch drift guard and upstream sync governance are documented and enforced | 2026-03-04 | - |
 
@@ -108,7 +108,7 @@ Strengthen P0/P1 contract coverage and converge integration stability signals.
 
 ### Completion Notes
 
-Pending.
+The GitHub ARM runner completed all 66 selected real-database tests with no failures, errors, skips, or crash exits. The PR gate completed 40 P0/P1 tests and five macOS ARM wheel build/install jobs for Python 3.9–3.13. New DB-API cases cover parameter counts, integrity-error classification, result metadata, and rollback on close. The local official-image baseline and the pinned CI development image both passed the full selected suite. The [CI evidence](test-results/2026-09-25-github-arm-ci.md) records the image-source limitation and result scope.
 
 ## Phase 3 (Week 5-6): Release Quality and Traceability
 

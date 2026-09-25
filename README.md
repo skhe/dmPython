@@ -31,7 +31,7 @@ The [open-source publishing Stage 0](docs/plans/2026-09-24-open-source-stage-0.m
 
 Current phase snapshot:
 - **Phase 1 (Week 1-2)**: DONE
-- **Phase 2 (Week 3-4)**: IN_PROGRESS
+- **Phase 2 (Week 3-4)**: DONE
 - **Phase 3 (Week 5-6)**: NOT_STARTED
 - **Phase 4 (Week 7-8)**: NOT_STARTED
 
