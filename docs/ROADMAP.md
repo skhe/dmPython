@@ -1,8 +1,8 @@
-# dmPython Improvement Roadmap (2026Q2)
+# dmPython Roadmap
 
-This document is the single source of truth (SSOT) for the project-level improvement roadmap and phase status.
+This document is the single source of truth (SSOT) for the project-level improvement roadmap and phase status. Updated 2026-09-25.
 
-The 2026Q4 open-source publishing track starts with [Stage 0: scope and release prerequisites](plans/2026-09-24-open-source-stage-0.md). It is tracked separately from the four historical phases below until its external authorization and test environment gates are satisfied.
+The current open-source track follows [Stage 0: scope and release prerequisites](plans/2026-09-24-open-source-stage-0.md). The four phases below preserve the earlier improvement plan; their release and maintenance work is sequenced against the current track.
 
 ## Status Legend
 
@@ -11,13 +11,36 @@ The 2026Q4 open-source publishing track starts with [Stage 0: scope and release 
 - `DONE`: Completed and verified.
 - `BLOCKED`: Temporarily blocked by dependency or environment.
 
+## Current open-source track (2026Q4)
+
+The next objective is a repeatable, publicly distributable release. The [main-branch CI run](https://github.com/skhe/dmPython/actions/runs/36089633170) passed 66 real-DM tests on ARM Linux and built/installed five macOS ARM wheels for CPython 3.9–3.13. Real-database behavior has only been exercised on CPython 3.10 in CI; build/import checks do not establish behavior on the other Python versions. Public wheel upload and GitHub Release remain disabled while the separately included Go driver's distribution rights are unresolved.
+
+Status: **1 done, 2 in progress, 1 blocked, 4 not started**.
+
+| Horizon | Initiative | Status | Owner | Target / exit evidence | Dependency |
+| --- | --- | --- | --- | --- | --- |
+| Done | Establish the GitHub CI baseline: required real-DM regression, wheel matrix, lint and branch protection | DONE | Maintainers | [Merged PR #3](https://github.com/skhe/dmPython/pull/3), [main CI](https://github.com/skhe/dmPython/actions/runs/36089633170) and [lint](https://github.com/skhe/dmPython/actions/runs/36089632930) green | Pinned third-party DM8 development image; DPI header secret for trusted-branch wheel jobs |
+| Now | Resolve distribution rights for the included Go driver and bridge binary, or replace that component | IN_PROGRESS | Maintainers (investigation and outreach) | Before any public sdist/wheel upload: record applicable terms or written permission covering source, modifications and binaries; otherwise land and regress a permitted replacement | [License investigation](plans/2026-09-24-go-driver-license-research.md); external answer may delay release |
+| Now | Preserve an official-DM comparison baseline and keep nightly CI usable | IN_PROGRESS | Maintainers | Before **2026-10-09**, renew the local official-image trial or replace it with a valid official test installation; continue recording nightly results and image digest/server-version changes | Local official trial expiry; third-party CI image provenance and its publisher-stated expiry |
+| Next | Expand real-DM behavior coverage across supported CPython versions | NOT_STARTED | Maintainers | CPython 3.9–3.13 each pass the selected real-DM suite with no failure, error or skip; record results by Python and DM8 server version | Stable ARM test database; CI matrix cost |
+| Next | Rehearse and harden release automation without publishing | NOT_STARTED | Maintainers | Preflight, five-wheel set, checksums, metadata, sdist contents and repeatable tag handling are verified in a non-public rehearsal | CI baseline; distribution-rights decision before any public artifact upload |
+| Next | Publish the first GitHub Release and PyPI package through gated automation | BLOCKED | Maintainers | After rights and regression gates pass: verified tagged release, five wheels and sdist on approved channels; PyPI trusted publishing and a tested recovery procedure | Go component rights or replacement; cross-version behavior results; release rehearsal; PyPI project-name check |
+| Later | Let outside contributors verify macOS wheel builds | NOT_STARTED | Maintainers | Fork PRs obtain the required DPI headers through an approved, reproducible path and run the same wheel checks as trusted branches | SDK/header distribution terms; current fork PRs only receive the real-DM gate |
+| Later | Document repeatable upstream sync and widen supported DM8 versions | NOT_STARTED | Maintainers | Patch drift guard plus sync playbook; compatibility results for additional DM8 releases | Phase 4 governance work; access to additional database versions |
+
+### Priority and dependencies
+
+The Go component's rights and real-database behavior can advance in parallel. The release rehearsal can also proceed locally, but publishing stays blocked until both gates pass. Keep `DMPYTHON_RELEASE_ENABLED` unset until the distribution decision is recorded. The official local trial expires on 2026-10-09; its renewal is the only fixed near-term date, while the other horizons are sequencing targets rather than release promises. A single DM8 instance on OrbStack remains sufficient for the official comparison baseline; the hosted ARM runner uses a fresh pinned development container for CI.
+
+This update moves CI and P0/P1 stability into the completed baseline, brings Go rights and official test continuity to the front, and separates release rehearsal from public publication. Frequent automatic releases are a later operating practice once each release can pass the same gates; version count is not a delivery target.
+
 ## Phase Overview
 
 | Phase | Window | Status | Owner | Exit Criteria | Last Updated | Evidence Links |
 | --- | --- | --- | --- | --- | --- | --- |
 | Phase 1 | Week 1-2 | DONE | Maintainers | README/README_zh positioning updated, ROADMAP established, roadmap status check wired into CI | 2026-09-24 | [64152ae](https://github.com/skhe/dmPython/commit/64152ae) · [lint](https://github.com/skhe/dmPython/actions/runs/36018070212) · [wheels](https://github.com/skhe/dmPython/actions/runs/36018069837) |
 | Phase 2 | Week 3-4 | DONE | Maintainers | `requires_dm` regression green, no crash/139, P0/P1 contract coverage strengthened | 2026-09-25 | [GitHub full regression](https://github.com/skhe/dmPython/actions/runs/36089236861) · [GitHub PR gate](https://github.com/skhe/dmPython/actions/runs/36089025280) · [Local baseline](test-results/2026-09-25-orb-arm-baseline.md) |
-| Phase 3 | Week 5-6 | NOT_STARTED | Maintainers | Release preflight and asset verification stable, tag release idempotency remains green | 2026-03-04 | - |
+| Phase 3 | Week 5-6 | IN_PROGRESS | Maintainers | Release preflight and asset verification stable, tag release idempotency remains green | 2026-09-25 | [Gated workflow](../.github/workflows/build-wheels.yml) · [Release checklist](release-checklist.md) |
 | Phase 4 | Week 7-8 | NOT_STARTED | Maintainers | Third-party patch drift guard and upstream sync governance are documented and enforced | 2026-03-04 | - |
 
 ## Phase 1 (Week 1-2): Positioning and Doc Governance
@@ -147,9 +170,9 @@ Ensure release outputs are complete, repeatable, and verifiable.
 - Add evidence links.
 - Add completion notes.
 
-### Completion Notes
+### Progress Notes
 
-Pending.
+The workflow now requires a real-DM pass and all five wheel builds before its tag release job can run. It verifies the wheel set and prepares checksums and build metadata. Public artifact upload is disabled pending the Go component's distribution decision; tag rerun and published-asset completeness are not yet verified. Continue with a non-public rehearsal, then complete the release acceptance criteria after the rights gate clears.
 
 ## Phase 4 (Week 7-8): Maintainability and Upstream Sync Governance
 

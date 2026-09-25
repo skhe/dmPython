@@ -32,4 +32,4 @@
 
 - 已增加 `--require-dm`：没有选中真实库测试、缺连接参数或连不上数据库时，回归命令会失败。
 - 已让标签发布依赖真实库回归；许可未明确时发布变量默认关闭。
-- 已建隔离 ARM 数据库和非管理员账号；首轮本机完整回归 64 项通过，残留表数为 0。[证据与限制](../test-results/2026-09-25-orb-arm-baseline.md)。新增行为测试后，macOS ARM 本机 68 项、ARM Linux 容器 66 项真实库用例通过；GitHub 托管流水线仍需线上运行结果确认。
+- 已建隔离 ARM 数据库和非管理员账号；首轮本机完整回归 64 项通过，残留表数为 0。[证据与限制](../test-results/2026-09-25-orb-arm-baseline.md)。新增行为测试后，macOS ARM 本机 68 项通过；[GitHub 托管 ARM 完整回归](https://github.com/skhe/dmPython/actions/runs/36089633170) 66 项真实库用例通过，五个 macOS ARM wheel 构建和安装检查通过。发布仍等待 Go 驱动的分发权利明确。
