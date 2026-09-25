@@ -1,7 +1,10 @@
 """Create an isolated test account in a fresh DM8 CI container."""
 
 import os
+import json
+import platform
 import time
+from pathlib import Path
 
 import dmPython
 
@@ -41,6 +44,20 @@ try:
     cur = test_conn.cursor()
     cur.execute("SELECT 1")
     assert cur.fetchone() == (1,)
+    cur.execute("SELECT ID_CODE FROM V$INSTANCE")
+    server_id_code = cur.fetchone()[0]
 finally:
     test_conn.close()
+Path("dm-ci-environment.json").write_text(
+    json.dumps(
+        {
+            "python": platform.python_version(),
+            "machine": platform.machine(),
+            "driver": dmPython.version,
+            "server_id_code": server_id_code,
+        },
+        indent=2,
+    ) + "\n",
+    encoding="utf-8",
+)
 print("DM8 test account ready")

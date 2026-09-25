@@ -1,5 +1,7 @@
 """Validate and summarize a real-database pytest JUnit report."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import xml.etree.ElementTree as ET

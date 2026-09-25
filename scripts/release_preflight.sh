@@ -13,7 +13,9 @@ if [[ -n "$TAG_NAME" ]]; then
 fi
 
 echo "[INFO] install preflight dependencies"
-python3 -m pip install --quiet pyyaml build delocate
+if ! python3 -c 'import yaml, build, delocate, twine, setuptools, wheel' >/dev/null 2>&1; then
+  python3 -m pip install --quiet pyyaml build delocate twine setuptools wheel
+fi
 
 echo "[INFO] workflow YAML syntax"
 python3 scripts/check_workflow_yaml.py
@@ -25,25 +27,31 @@ python3 scripts/check_third_party_patch.py
 EXPECTED_VERSION="$(python3 scripts/check_version_consistency.py --print-version)"
 echo "[INFO] expected version: $EXPECTED_VERSION"
 
-echo "[INFO] clean previous wheel artifacts"
-rm -rf dist dist_fixed
+OUTPUT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dmpython-preflight.XXXXXX")"
+mkdir -p "$OUTPUT_DIR/wheels" "$OUTPUT_DIR/fixed" "$OUTPUT_DIR/sdist"
+echo "[INFO] preflight output: $OUTPUT_DIR"
 
 echo "[INFO] build wheel"
-python3 -m build --wheel
+MACOSX_DEPLOYMENT_TARGET=14.0 _PYTHON_HOST_PLATFORM=macosx-14.0-arm64 \
+  python3 -m build --wheel --no-isolation --outdir "$OUTPUT_DIR/wheels"
 
-mkdir -p dist_fixed
-DYLD_LIBRARY_PATH=dpi_bridge delocate-wheel -w dist_fixed dist/*.whl -v
+echo "[INFO] build and check source archive"
+python3 -m build --sdist --no-isolation --outdir "$OUTPUT_DIR/sdist"
+python3 -m twine check "$OUTPUT_DIR"/sdist/*.tar.gz
+python3 scripts/check_sdist_contents.py "$OUTPUT_DIR"/sdist/*.tar.gz
+
+DYLD_LIBRARY_PATH=dpi_bridge delocate-wheel -w "$OUTPUT_DIR/fixed" "$OUTPUT_DIR"/wheels/*.whl -v
 
 echo "[INFO] verify wheel import in isolated env"
-python3 -m venv /tmp/dmpython_release_preflight_venv
-WHEEL_PATHS=("$ROOT_DIR"/dist_fixed/*.whl)
-/tmp/dmpython_release_preflight_venv/bin/pip install --quiet "${WHEEL_PATHS[@]}"
-ACTUAL_VERSION=$(cd /tmp && /tmp/dmpython_release_preflight_venv/bin/python - <<'PY'
+python3 -m venv "$OUTPUT_DIR/venv"
+WHEEL_PATHS=("$OUTPUT_DIR"/fixed/*.whl)
+"$OUTPUT_DIR/venv/bin/pip" install --quiet "${WHEEL_PATHS[@]}"
+ACTUAL_VERSION=$(cd /tmp && "$OUTPUT_DIR/venv/bin/python" - <<'PY'
 import dmPython
 print(dmPython.version)
 PY
 )
-rm -rf /tmp/dmpython_release_preflight_venv
+rm -rf "$OUTPUT_DIR/venv"
 
 if [[ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
   echo "[FAIL] wheel runtime version mismatch: $ACTUAL_VERSION != $EXPECTED_VERSION"

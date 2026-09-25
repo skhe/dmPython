@@ -13,6 +13,7 @@
 ## 1. Preflight
 
 - [ ] Run `./scripts/release_preflight.sh vX.Y.Z`
+- [ ] For the candidate commit, rehearse the five-wheel and sdist bundle locally with `scripts/release_assets.py prepare <directory> --tag vX.Y.Z` followed by `verify`; record the manifest checksums and confirm a second `prepare` produces the same files
 - [ ] Confirm workflow lint and actionlint checks are green
 - [ ] Confirm version consistency (`pyproject.toml`, `setup.py`, `src/native/py_Dameng.h`, `dmPython.version`)
 - [ ] Confirm third-party patch checks pass (`scripts/check_third_party_patch.py`)
