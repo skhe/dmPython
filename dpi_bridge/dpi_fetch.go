@@ -1127,7 +1127,9 @@ func extractBoundValue(bind bindParamInfo) interface{} {
 		return time.Date(int(d.year), time.Month(d.month), int(d.day), 0, 0, 0, 0, time.Local)
 	case DSQL_C_TIME:
 		t := (*C.dpi_time_t)(bind.dataPtr)
-		return time.Date(0, 1, 1, int(t.hour), int(t.minute), int(t.second), 0, time.Local)
+		// Year zero can carry a historical local offset (for example +08:05 in
+		// Asia/Shanghai), shifting a timezone-free TIME value when encoded.
+		return time.Date(2000, 1, 1, int(t.hour), int(t.minute), int(t.second), 0, time.Local)
 	case DSQL_C_NUMERIC:
 		num := (*C.dpi_numeric_t)(bind.dataPtr)
 		return numericToString(num)
