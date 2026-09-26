@@ -410,7 +410,13 @@ func (G2DB g2db) fromString(val string, param parameter, conn *DmConnection) (in
 		}
 		z, _ := f.Int(nil)
 		return G2DB.fromBigInt(z, param, conn)
-	case REAL, DOUBLE, DECIMAL:
+	case DECIMAL:
+		d, err := newDecimalFromString(val, int(param.prec), int(param.scale))
+		if err != nil {
+			return nil, err
+		}
+		return d.encodeDecimal()
+	case REAL, DOUBLE:
 		f, ok := new(big.Float).SetString(val)
 		if ok {
 			return G2DB.fromBigFloat(f, param, conn)
