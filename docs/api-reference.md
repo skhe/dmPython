@@ -59,6 +59,8 @@ dmPython.connect(
 说明：
 
 - `host` 与 `server` 互斥（只允许设置一个）。
+- IPv6 地址使用方括号，例如 `server="[::1]"`；`dsn` 可写为 `"[::1]:5236"`。
+- `dmsvc_path` 指向包含 `dm_svc.conf` 的目录；连接时可把 `server` 设为配置文件中的服务名。
 - `user` 支持 `user/password@server:port[/schema][?catalog=...]` 形式。
 - `login_timeout` 以毫秒为单位，默认 5000，限制首次建连握手；设为 0 表示不限制。`connection_timeout` 以秒为单位，默认 0 不限制，限制 SQL 执行时间。
 - 常量参数建议使用模块常量（如 `DSQL_AUTOCOMMIT_ON`、`ISO_LEVEL_READ_COMMITTED`）。
