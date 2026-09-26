@@ -759,7 +759,15 @@ func (c *DmConnector) parseDSN(dsn string) (*Properties, string, string, error) 
 		for _, kvString := range strings.Split(queryString, "&") {
 			kv := strings.SplitN(kvString, "=", 2)
 			if kv != nil && len(kv) > 1 {
-				dsnProps.Set(kv[0], kv[1])
+				value := kv[1]
+				if kv[0] == AppNameKey {
+					decoded, err := url.QueryUnescape(value)
+					if err != nil {
+						return nil, "", "", err
+					}
+					value = decoded
+				}
+				dsnProps.Set(kv[0], value)
 			}
 		}
 	}
@@ -927,7 +935,7 @@ func (c *DmConnector) Driver() driver.Driver {
 
 func (c *DmConnector) connect(ctx context.Context) (*DmConnection, error) {
 	if c.group != nil && len(c.group.epList) > 0 {
-		return c.group.connect(c)
+		return c.group.connect(c, ctx)
 	} else {
 		return c.connectSingle(ctx)
 	}
@@ -976,6 +984,12 @@ func (c *DmConnector) connectSingle(ctx context.Context) (*DmConnection, error) 
 		_, err = dc.exec("set schema \""+util.StringUtil.ProcessDoubleQuoteOfName(c.schema)+"\"", nil)
 		if err != nil {
 
+			dc.cleanup()
+			return nil, err
+		}
+	}
+	if _, ok := ctx.Deadline(); ok {
+		if err = dc.Access.dm_build_415.SetDeadline(time.Time{}); err != nil {
 			dc.cleanup()
 			return nil, err
 		}

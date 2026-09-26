@@ -174,7 +174,7 @@ IntervalVar_SetValue(
     //delta传进来时是已经换算成各个单位能表示的最大值了，day如果为负，整个的结果最终必为负的
     if (days < 0)
     {
-        total_seconds       = delta->days * 24 * 3600 + delta->seconds;
+        total_seconds       = (sdint8) delta->days * 24 * 3600 + delta->seconds;
 
         if (total_seconds < 0 && delta->microseconds > 0)
         {
@@ -243,7 +243,7 @@ IntervalVar_GetValue(
     if (ds->interval_sign == 1)
     {
         //intv上的day,hour,minute,seconds都是正值，sign用来区分正负
-        total_seconds   = days * 24 * 60 * 60 + seconds;        //用正值表示负的总秒数
+        total_seconds   = (sdint8) days * 24 * 60 * 60 + seconds;        //用正值表示负的总秒数
 
         //microseconds转成正值
         microseconds    = 1000000 - microseconds;               //前面算出来的微秒是正值，但sign=1时表示的是负多少微秒，转成正值
@@ -293,6 +293,13 @@ YMIntervalVar_SetValue(
     // populate the buffer and confirm the maximum size is not exceeded
     if (dmBuffer_FromObject(&buffer, value, var->environment->encoding) < 0)
         return -1;
+
+    if (buffer.size > var->bufferSize)
+    {
+        dmBuffer_Clear(&buffer);
+        PyErr_SetString(PyExc_ValueError, "year-month interval exceeds the binding buffer");
+        return -1;
+    }
 
     if (buffer.size)
     {

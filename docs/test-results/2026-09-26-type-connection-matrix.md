@@ -20,7 +20,7 @@
 
 ## 已发现的问题
 
-1. **连接选项的生效尚未验证**：`connection_timeout=5`、`login_timeout=5` 和 `app_name='dmpython_matrix'` 建连后，当前属性读回分别为 `0`、`0` 和空字符串。现有用例对前两项只验证“可建连”，不声称超时配置生效。需要单独设计可控的网络故障与服务器元数据检查。
+1. **连接选项旧问题**：此前 `connection_timeout=5`、`login_timeout=5` 和 `app_name='dmpython_matrix'` 建连后，属性读回分别为 `0`、`0` 和空字符串；`login_timeout=1` 遇到无响应服务端时，4 秒内仍无法返回。本轮已修复并加入行为回归。测试账号没有 `SYS.V$SESSIONS` 查询权限，尚未从服务端会话视图独立核实 `app_name`。
 
 本次修复了 `datetime.time` 绑定在亚洲/上海本地时区下偏移五分钟的问题：桥接层曾以公元 0 年构造无时区的 `TIME`，触发历史时区偏移；改用现代锚定日期后，上述五版用例均验证 `23:59:58` 原样写入和读回。
 
@@ -32,6 +32,12 @@
 
 绑定带固定时区的 Python `datetime.time`、`datetime.datetime` 或带偏移量的文本时，保留偏移量；读取 `TIME WITH TIME ZONE` 和 `TIMESTAMP WITH TIME ZONE` 时也保留偏移量。回归以时间点相等为准，允许数据库把输入时区规范化为服务器时区。本机官方 DM8 上，Python 3.9、3.10、3.11、3.12、3.13 的完整真实库回归均为 **112 passed、0 failed**，另有 2 个非真实库用例未选入。
 
+## 后续修复：区间与连接超时
+
+`INTERVAL DAY TO SECOND` 现可与 Python `datetime.timedelta` 往返，包括负数、微秒、零值和负 10 万天；读取时描述类型为 `dmPython.INTERVAL`。`INTERVAL YEAR TO MONTH` 的文本参数与读取类型 `dmPython.YEAR_MONTH_INTERVAL` 也已验证，两个区间类型的 `NULL` 往返通过。旧实现对大负区间读取发生 32 位整数溢出，本轮已修复。
+
+`login_timeout` 现限制完整建连握手：本机假服务端接受 TCP 后不回复，设为 1 秒会在约 1 秒内报错。`connection_timeout` 以秒传递给底层 TCP 拨号选项，属性读回与输入一致；`app_name` 会传给底层驱动并可读回。本机官方 DM8 上，Python 3.9、3.10、3.11、3.12、3.13 的完整真实库回归均为 **121 passed、0 failed**，另有 2 个非真实库用例未选入。
+
 ## 下一轮边界
 
-需要继续覆盖其他十进制边界、时区边界、区间、复杂对象与数组、BFILE、不同编码，以及 SSL、UKey、MPP、读写分离和超时/故障转移的实际效果。当前仅有一版官方 DM8 服务端和一版 GitHub CI 开发镜像的历史基线；不能据此推断跨达梦服务端版本兼容。
+需要继续覆盖其他十进制边界、时区边界、其他区间限定形式、复杂对象与数组、BFILE、不同编码，以及 SSL、UKey、MPP、读写分离、拨号超时和故障转移的实际效果。当前仅有一版官方 DM8 服务端和一版 GitHub CI 开发镜像的历史基线；不能据此推断跨达梦服务端版本兼容。

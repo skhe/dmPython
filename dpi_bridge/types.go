@@ -193,6 +193,8 @@ const (
 	DSQL_ROWID        = 28
 	DSQL_RSET         = 119
 	DSQL_BFILE        = 1000
+	DSQL_INTERVAL_YEAR_TO_MONTH = 106
+	DSQL_INTERVAL_DAY_TO_SECOND = 109
 )
 
 // Environment/Connection attributes (from DPIext.h)

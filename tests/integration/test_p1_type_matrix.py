@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from decimal import Decimal
 
 import pytest
+
+import dmPython
 
 
 pytestmark = [pytest.mark.requires_dm, pytest.mark.p1_contract]
@@ -64,7 +67,14 @@ def test_scalar_type_roundtrip(conn, table_name_factory, drop_table, sql_type, v
         cur.close()
 
 
-@pytest.mark.parametrize("sql_type", ["INTEGER", "DECIMAL(18, 6)", "VARCHAR(80)", "VARBINARY(16)", "DATE", "TIMESTAMP"])
+@pytest.mark.parametrize(
+    "sql_type",
+    [
+        "INTEGER", "DECIMAL(18, 6)", "VARCHAR(80)", "VARBINARY(16)",
+        "DATE", "TIMESTAMP", "INTERVAL DAY(9) TO SECOND(6)",
+        "INTERVAL YEAR(9) TO MONTH",
+    ],
+)
 def test_typed_null_roundtrip(conn, table_name_factory, drop_table, sql_type):
     table = table_name_factory("DMPY_NULL")
     cur = conn.cursor()
@@ -160,6 +170,48 @@ def test_timezone_time_roundtrip_preserves_instant(
                 ).time()
             else:
                 assert parsed == expected
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        dt.timedelta(days=1, hours=2, minutes=3, seconds=4, microseconds=123456),
+        -dt.timedelta(seconds=1, microseconds=1),
+        -dt.timedelta(days=100000, microseconds=1),
+        dt.timedelta(0),
+    ],
+    ids=["positive-fraction", "negative-fraction", "large-negative", "zero"],
+)
+def test_day_second_interval_timedelta_roundtrip(conn, table_name_factory, drop_table, value):
+    table = table_name_factory("DMPY_INTERVAL_DT")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (v INTERVAL DAY(9) TO SECOND(6))")
+        cur.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+        conn.commit()
+        cur.execute(f"SELECT v FROM {table}")
+        assert cur.description[0][1] is dmPython.INTERVAL
+        assert cur.fetchone() == (value,)
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
+
+
+def test_year_month_interval_text_roundtrip(conn, table_name_factory, drop_table):
+    table = table_name_factory("DMPY_INTERVAL_YM")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (v INTERVAL YEAR(9) TO MONTH)")
+        cur.execute(f"INSERT INTO {table} VALUES (?)", ("INTERVAL '01-02' YEAR(9) TO MONTH",))
+        conn.commit()
+        cur.execute(f"SELECT v FROM {table}")
+        assert cur.description[0][1] is dmPython.YEAR_MONTH_INTERVAL
+        assert re.search(r"'0*1-0*2'", cur.fetchone()[0])
     finally:
         drop_table(cur, table)
         conn.commit()

@@ -31,6 +31,28 @@
   - `test_clob_unicode_problem_patterns_length_contract`
   - `test_clob_unicode_problem_patterns_subprocess_no_crash`
 
+## Patch: initial connection timeout through endpoint groups
+
+- Files: `a.go`, `n.go`, `x.go`, `y.go`, `m.go`
+- Problem: ordinary host connections are wrapped in an endpoint group. That path
+  replaced the caller's context with `context.Background()`, so `login_timeout`
+  could not stop an unresponsive handshake.
+- Fix: pass the original context through endpoint selection and dialing, apply
+  its deadline to the socket during handshake, then clear the deadline once the
+  connection is established. Endpoint retries and wait intervals also respect
+  cancellation. Reconnects retain a fresh background context.
+- Regression: `test_login_timeout_interrupts_unresponsive_handshake` uses a
+  local TCP listener that accepts a connection but never replies.
+
+## Patch: application name query value
+
+- File: `n.go`
+- Decode the escaped `appName` query value so spaces, `&`, and `+` reach the
+  driver as one application name. Other existing DSN properties retain their
+  previous parsing behavior.
+- Regression: `test_connection_timeout_options_are_reported` connects with an
+  application name containing `&` and `+`.
+
 ## Rollback
 
 - Remove `replace gitee.com/chunanyong/dm => ./third_party/chunanyong_dm` in `dpi_bridge/go.mod`.

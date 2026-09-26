@@ -60,6 +60,7 @@ dmPython.connect(
 
 - `host` 与 `server` 互斥（只允许设置一个）。
 - `user` 支持 `user/password@server:port[/schema][?catalog=...]` 形式。
+- `login_timeout` 以秒为单位，限制首次建连握手；`connection_timeout` 以秒为单位，传给底层 TCP 拨号超时。两者均不限制 SQL 执行时间。
 - 常量参数建议使用模块常量（如 `DSQL_AUTOCOMMIT_ON`、`ISO_LEVEL_READ_COMMITTED`）。
 
 ### 模块函数
