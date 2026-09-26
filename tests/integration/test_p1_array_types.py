@@ -114,3 +114,77 @@ def test_object_with_varray_keeps_decimal_elements(conn, table_name_factory, dro
                 else:
                     cleanup.execute(f"DROP TYPE {name}")
         conn.commit()
+
+
+def test_varray_of_objects_preserves_null_members(conn, table_name_factory, drop_table):
+    object_type = table_name_factory("DMPY_ARRAY_ITEM")
+    array_type = table_name_factory("DMPY_OBJECT_ARRAY")
+    table = table_name_factory("DMPY_OBJECT_ARRAY_TAB")
+    values = [
+        [Decimal("12345678901234567890.12345678"), "汉字"],
+        None,
+        [None, "emoji 😀"],
+    ]
+    cur = conn.cursor()
+    created = []
+    try:
+        cur.execute(f"CREATE TYPE {object_type} AS OBJECT (AMOUNT DECIMAL(30,8), LABEL VARCHAR(20))")
+        created.append(("TYPE", object_type))
+        cur.execute(f"CREATE TYPE {array_type} AS VARRAY(3) OF {object_type}")
+        created.append(("TYPE", array_type))
+        cur.execute(f"CREATE TABLE {table} (V {array_type})")
+        created.append(("TABLE", table))
+        conn.commit()
+
+        value = dmPython.objectvar(conn, array_type)
+        value.setvalue(values)
+        cur.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+        conn.commit()
+
+        cur.execute(f"SELECT V FROM {table}")
+        assert cur.fetchone()[0].getvalue() == values
+    finally:
+        conn.rollback()
+        with conn.cursor() as cleanup:
+            for kind, name in reversed(created):
+                if kind == "TABLE":
+                    drop_table(cleanup, name)
+                else:
+                    cleanup.execute(f"DROP TYPE {name}")
+        conn.commit()
+        cur.close()
+
+
+def test_varray_of_varray_keeps_decimal_elements(conn, table_name_factory, drop_table):
+    inner_type = table_name_factory("DMPY_NEST_INNER")
+    outer_type = table_name_factory("DMPY_NEST_OUTER")
+    table = table_name_factory("DMPY_NEST_ARRAY_TAB")
+    values = [[Decimal("12345678901234567890.12345678"), None], [Decimal("0.00000001")]]
+    cur = conn.cursor()
+    created = []
+    try:
+        cur.execute(f"CREATE TYPE {inner_type} AS VARRAY(2) OF DECIMAL(30,8)")
+        created.append(("TYPE", inner_type))
+        cur.execute(f"CREATE TYPE {outer_type} AS VARRAY(2) OF {inner_type}")
+        created.append(("TYPE", outer_type))
+        cur.execute(f"CREATE TABLE {table} (V {outer_type})")
+        created.append(("TABLE", table))
+        conn.commit()
+
+        value = dmPython.objectvar(conn, outer_type)
+        value.setvalue(values)
+        cur.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+        conn.commit()
+
+        cur.execute(f"SELECT V FROM {table}")
+        assert cur.fetchone()[0].getvalue() == values
+    finally:
+        conn.rollback()
+        with conn.cursor() as cleanup:
+            for kind, name in reversed(created):
+                if kind == "TABLE":
+                    drop_table(cleanup, name)
+                else:
+                    cleanup.execute(f"DROP TYPE {name}")
+        conn.commit()
+        cur.close()
