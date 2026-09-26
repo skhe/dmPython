@@ -61,6 +61,7 @@ type connHandle struct {
 	connTimeout   int
 	appName       string
 	compressMsg   int
+	sslPath       string
 	svcPath       string
 	mppLogin      int
 	rwSeparate    int
@@ -244,10 +245,22 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 			conn.lastErr = &diagInfo{errorCode: -1, message: "use_stmt_pool is not supported by this bridge"}
 			return DSQL_ERROR
 		}
-	case DSQL_ATTR_SSL_PATH, DSQL_ATTR_SSL_PWD, DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN:
+	case DSQL_ATTR_SSL_PATH:
+		if conn.conn != nil {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "ssl_path can only be set before login"}
+			return DSQL_ERROR
+		}
+		if val == nil {
+			conn.sslPath = ""
+		} else if valLen > 0 {
+			conn.sslPath = C.GoStringN((*C.char)(val), C.int(valLen))
+		} else {
+			conn.sslPath = C.GoString((*C.char)(val))
+		}
+	case DSQL_ATTR_SSL_PWD, DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN:
 		if val != nil && C.GoString((*C.char)(val)) != "" {
 			name := map[int32]string{
-				DSQL_ATTR_SSL_PATH: "ssl_path", DSQL_ATTR_SSL_PWD: "ssl_pwd",
+				DSQL_ATTR_SSL_PWD: "ssl_pwd",
 				DSQL_ATTR_UKEY_NAME: "ukey_name", DSQL_ATTR_UKEY_PIN: "ukey_pin",
 			}[attr]
 			conn.lastErr = &diagInfo{errorCode: -1, message: name + " is not supported by this bridge"}
@@ -360,6 +373,11 @@ func dpi_get_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, bufLen C.sd
 		}
 	case DSQL_ATTR_APP_NAME:
 		n := cStringLen((*C.sdbyte)(val), int(bufLen), conn.appName)
+		if valLen != nil {
+			*valLen = C.sdint4(n)
+		}
+	case DSQL_ATTR_SSL_PATH:
+		n := cStringLen((*C.sdbyte)(val), int(bufLen), conn.sslPath)
 		if valLen != nil {
 			*valLen = C.sdint4(n)
 		}
@@ -481,6 +499,9 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	if conn.compressMsg >= 0 {
 		params = append(params, "compress="+strconv.Itoa(conn.compressMsg))
 	}
+	if conn.sslPath != "" {
+		params = append(params, "sslFilesPath="+url.QueryEscape(conn.sslPath))
+	}
 	if conn.svcPath != "" {
 		params = append(params, "svcConfPath="+url.QueryEscape(filepath.Join(conn.svcPath, "dm_svc.conf")))
 	}
@@ -540,6 +561,11 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 			errorCode: -1,
 			message:   fmt.Sprintf("Failed to get DM connection: %v", dbErr),
 		}
+		return DSQL_ERROR
+	}
+	if conn.sslPath != "" && dmConn.SSLMode() != 1 {
+		db.Close()
+		conn.lastErr = &diagInfo{errorCode: -1, message: "ssl_path requested, but the server did not negotiate encrypted SSL"}
 		return DSQL_ERROR
 	}
 

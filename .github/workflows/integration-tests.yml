@@ -98,3 +98,75 @@ jobs:
       - name: Show database logs on failure
         if: failure()
         run: docker logs --tail 80 dmpython-ci-dm8 || true
+
+  real-dm-ssl-arm:
+    name: Real DM8 SSL / ARM Linux / Python 3.10
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache-dependency-path: dpi_bridge/go.sum
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Start isolated DM8 and extract build headers
+        run: |
+          admin_password="DmPyA1$(openssl rand -hex 12)"
+          echo "::add-mask::$admin_password"
+          {
+            echo "DM_CI_ADMIN_PASSWORD=$admin_password"
+            echo 'DM_SSL_TEST_PASSWORD='"$admin_password"
+            echo 'DM_SSL_TEST_USER=SYSDBA'
+            echo 'DM_SSL_TEST_HOST=127.0.0.1'
+            echo 'DM_SSL_TEST_PORT=15239'
+            echo "DM_SSL_TEST_PATH=$PWD/ssl-certs"
+          } >> "$GITHUB_ENV"
+          docker pull --platform linux/arm64 \
+            yhl452493373/dm8@sha256:5b9d23c04b148d5765d6077d95b64032be64daedabeef9cddc7a4216b9ad0a1a
+          docker run -d --user root --workdir /opt/dmdbms/bin --name dmpython-ci-dm8-ssl \
+            -e SYSDBA_PWD="$admin_password" \
+            -e SYSAUDITOR_PWD="$admin_password" \
+            -e CHARSET=1 -e DB_NAME=DMPYSSL -e INSTANCE_NAME=DMPYSSL \
+            -p 127.0.0.1:15239:5236 \
+            yhl452493373/dm8@sha256:5b9d23c04b148d5765d6077d95b64032be64daedabeef9cddc7a4216b9ad0a1a
+          mkdir -p dpi_include ssl-certs
+          docker cp dmpython-ci-dm8-ssl:/opt/dmdbms/drivers/dpi/include/. dpi_include/
+          docker cp dmpython-ci-dm8-ssl:/opt/dmdbms/bin/client_ssl/SYSDBA/. ssl-certs/
+          docker cp dmpython-ci-dm8-ssl:/opt/dmdbms/bin/server_ssl/server-cert.pem ssl-certs/server-cert.pem
+          test -f dpi_include/DPI.h
+          chmod 700 ssl-certs
+          chmod 600 ssl-certs/*
+
+      - name: Build driver and enable mandatory SSL
+        run: |
+          python -m pip install setuptools wheel pytest pytest-timeout
+          if ! python setup.py build_ext --inplace > /tmp/dmpython-ssl-build.log 2>&1; then
+            tail -80 /tmp/dmpython-ssl-build.log
+            exit 1
+          fi
+          PYTHONPATH="$PWD" python scripts/enable_dm_ssl_ci.py
+          docker restart dmpython-ci-dm8-ssl
+
+      - name: Run encrypted-connection regression
+        timeout-minutes: 10
+        env:
+          TZ: Asia/Shanghai
+        run: python -m pytest -q tests/ssl --junitxml=pytest-dm-ssl.xml
+
+      - name: Upload SSL regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-dm-ssl-arm-py3.10
+          path: pytest-dm-ssl.xml
+          if-no-files-found: ignore
+
+      - name: Show SSL database logs on failure
+        if: failure()
+        run: docker logs --tail 80 dmpython-ci-dm8-ssl || true

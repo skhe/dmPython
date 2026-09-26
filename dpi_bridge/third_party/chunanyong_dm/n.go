@@ -602,7 +602,7 @@ func (c *DmConnector) setAttributes(props *Properties) error {
 	}
 	c.sslKeyPath = props.GetTrimString(SslKeyPathKey, c.sslKeyPath)
 	if c.sslKeyPath == "" && c.sslFilesPath != "" {
-		c.sslKeyPath = filepath.Join(c.sslKeyPath, "client-key.pem")
+		c.sslKeyPath = filepath.Join(c.sslFilesPath, "client-key.pem")
 	}
 
 	c.kerberosLoginConfPath = props.GetTrimString(KerberosLoginConfPathKey, c.kerberosLoginConfPath)
@@ -760,7 +760,8 @@ func (c *DmConnector) parseDSN(dsn string) (*Properties, string, string, error) 
 			kv := strings.SplitN(kvString, "=", 2)
 			if kv != nil && len(kv) > 1 {
 				value := kv[1]
-				if kv[0] == AppNameKey || kv[0] == "svcConfPath" {
+				if kv[0] == AppNameKey || kv[0] == "svcConfPath" ||
+					kv[0] == SslFilesPathKey || kv[0] == SslCertPathKey || kv[0] == SslKeyPathKey {
 					decoded, err := url.QueryUnescape(value)
 					if err != nil {
 						return nil, "", "", err

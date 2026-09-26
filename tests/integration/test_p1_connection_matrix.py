@@ -335,7 +335,6 @@ def test_rwseparate_options_are_reported(conn_params):
 @pytest.mark.parametrize(
     ("option", "value"),
     [
-        ("ssl_path", "/nonexistent/dmpython-client-ssl"),
         ("ssl_pwd", "test-only-password"),
         ("ukey_name", "nonexistent-test-ukey"),
         ("ukey_pin", "test-only-pin"),
@@ -344,6 +343,11 @@ def test_rwseparate_options_are_reported(conn_params):
 def test_security_options_do_not_silently_connect_without_support(conn_params, option, value):
     with pytest.raises(dmPython.Error, match="not supported"):
         dmPython.connect(**conn_params, **{option: value})
+
+
+def test_ssl_path_rejects_plain_database(conn_params):
+    with pytest.raises(dmPython.Error, match="did not negotiate encrypted SSL"):
+        dmPython.connect(**conn_params, ssl_path="/nonexistent/dmpython-client-ssl")
 
 
 @pytest.mark.parametrize(

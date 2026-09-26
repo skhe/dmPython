@@ -20,7 +20,7 @@ For production environments, prefer the official [DamengDB/dmPython](https://git
 - **Supported build targets**: macOS 14+ ARM64 with CPython 3.9–3.13. Database behavior is supported only where integration tests have evidence.
 - **Best-effort**: Extended scenarios not currently covered by CI.
 - **Not guaranteed**: Production SLA commitments, vendor-certified compatibility guarantees, and closed-source component support contracts.
-- **Connection security**: SSL certificate and UKey login options are not implemented by the Go bridge. Non-empty `ssl_path`, `ssl_pwd`, `ukey_name`, or `ukey_pin` now raise an error instead of silently using a regular connection. MPP and read/write separation settings are passed through, but cluster routing needs a cluster regression environment.
+- **Connection security**: `ssl_path` supports encrypted DM8 connections with client certificate and key. The directory must contain `ca-cert.pem`, `client-cert.pem`, and `client-key.pem`; bundled legacy server certificates without a SAN also require an exact `server-cert.pem` pin. A plain server is rejected when `ssl_path` is set. Non-empty `ssl_pwd`, `ukey_name`, and `ukey_pin` remain unsupported. MPP and read/write separation settings are passed through, but cluster routing needs a cluster regression environment.
 
 ## Roadmap & Status
 

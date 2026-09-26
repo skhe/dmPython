@@ -52,6 +52,18 @@
 - Regression: `test_compress_msg_is_applied` connects with compression both
   disabled and enabled against a real DM8 instance.
 
+## Patch: verified SSL connections
+
+- Files: `a.go`, `n.go`, `bridge_options.go`, `security/zzi.go`
+- Resolve the client key from `sslFilesPath` and decode escaped SSL path values.
+- Verify modern server certificates with the configured CA and hostname. For
+  DM8's bundled legacy certificate without SAN, require an exact server
+  certificate pin and reject expired pins.
+- Expose the negotiated SSL mode so the DPI bridge rejects plain connections
+  when the caller requests `ssl_path`.
+- Regression: `tests/ssl/test_ssl_connection.py` uses a real SSL-enabled DM8
+  instance, including wrong and missing pins.
+
 ## Patch: initial connection timeout through endpoint groups
 
 - Files: `a.go`, `n.go`, `x.go`, `y.go`, `m.go`
