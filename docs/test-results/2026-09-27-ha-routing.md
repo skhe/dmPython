@@ -36,8 +36,8 @@ needs permission to create and drop a table on the primary.
 
 This HA check currently runs locally: the GitHub hosted runners cannot reach
 the user's Orb network. The regular GitHub ARM real-database matrix still
-checks single-node behavior and build compatibility. MPP routing and UKey
-authentication remain unverified.
+checks single-node behavior and build compatibility. MPP has since been
+verified separately; UKey authentication remains unverified.
 
 ## Automatic takeover and new connections
 
@@ -69,8 +69,8 @@ table. Both phases passed. The script requires a unique `--table` name,
 `DM_HA_SERVICE_PATH`; `prepare` also needs `DM_HA_STANDBY_HOST` and optional
 `DM_HA_STANDBY_PORT`. Pass the standby instance name printed by `prepare` as
 `--expected-new-primary` to `verify`. The operator triggers the fault between
-the two phases. Existing open connections were not tested for transparent
-reconnection; the verified behavior is a **new connection** after takeover.
+the two phases. This two-phase check verified a **new connection** after
+takeover; the already-open case was tested separately below.
 
 The service configuration used two reachable endpoints:
 
@@ -95,5 +95,45 @@ pin one physical connection; `commit()` reports an error after that connection
 is lost, and a fresh connection confirms the row was not persisted. The
 repeatable check is `scripts/verify_dm_restart_transaction.py`; it also runs
 in a dedicated GitHub ARM CI job. Local full real-database regression with a
-dedicated test user passed 193 cases. A separate primary/standby takeover with
-an already-open connection has still not been verified.
+dedicated test user passed 193 cases.
+
+## Existing connections across a real primary/standby takeover
+
+The follow-up used a new isolated two-node watcher group and confirmation
+monitor in local Orb, with the same ARM image
+`dm8:dm8_20250924_rev288894_HWarm_kylin10_64` (image ID
+`sha256:eb5f243c8f4322596d0eac611c0fa2d8cd8a03a5d3f69889f3549a530354b210`).
+The primary was `GRP453932_DW1`, and the standby was `GRP453932_DW2`. The
+service listed both endpoints with `LOGIN_MODE=1`. The image's missing
+`TIME_ZONE` substitution was repaired only inside these temporary containers.
+
+`scripts/verify_dm_open_connection_failover.py` kept an autocommit service
+connection and an uncommitted manual-transaction service connection open on
+the primary. It wrote `12345678901234567890.12345678` to a `DECIMAL(30,8)`
+column and confirmed the exact value on the standby. It then inserted an
+uncommitted second row and confirmed that the standby could not see it. The
+script killed `dmwatcher` and `dmserver` inside the disposable primary
+container, preserving the container's network identity. The monitor logged
+`AUTO TAKEOVER GRP453932_DW2` and `auto takeover success` at 04:36:25–27
+local time. The standby became `PRIMARY, OPEN`.
+
+The old transaction's `commit()` raised `dmPython.Error`; the lost row remained
+absent. The *same* already-open autocommit Python connection reached the
+promoted primary without a visible query error in this run, then wrote and
+read `98765432109876543210.87654321` exactly. The promoted primary also read
+the original replicated value exactly. The verifier removed its table.
+
+After the former primary rejoined as `STANDBY, OPEN`, the same verifier ran in
+the reverse direction. The monitor logged automatic takeover by
+`GRP453932_DW1` at 04:39:57–58. The already-open service connection reached
+that promoted node with zero visible query errors; the lost manual transaction
+again raised on `commit()`, and both exact decimal checks passed.
+
+To repeat this check against a disposable HA group, set `DM_HA_USER`,
+`DM_HA_PASSWORD`, `DM_HA_SERVICE_NAME`, `DM_HA_SERVICE_PATH` (directory
+containing `dm_svc.conf`), `DM_HA_STANDBY_HOST`, optional
+`DM_HA_STANDBY_PORT`, and `DM_HA_PRIMARY_CONTAINER`. The service must route
+only to the primary; the standby address must connect directly. Run the script
+from a Python environment with the local extension and bridge library. It
+stops the named primary's database and watcher processes. This local HA check
+is not yet a GitHub-hosted CI gate because the runner cannot reach Orb.
