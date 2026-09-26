@@ -60,6 +60,7 @@ type connHandle struct {
 	loginTimeout  int
 	connTimeout   int
 	appName       string
+	compressMsg   int
 	svcPath       string
 	mppLogin      int
 	rwSeparate    int
@@ -82,6 +83,7 @@ func newConnHandle(env *envHandle) *connHandle {
 		port:          DSQL_DEAFAULT_TCPIP_PORT,
 		autocommit:    false,
 		loginTimeout:  5000,
+		compressMsg:   -1,
 		mppLogin:      -1,
 		rwSeparate:    -1,
 		rwPercent:     -1,
@@ -227,6 +229,21 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 			return DSQL_ERROR
 		}
 		conn.rwPercent = intVal
+	case DSQL_ATTR_COMPRESS_MSG:
+		if conn.conn != nil {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "compress_msg can only be set before login"}
+			return DSQL_ERROR
+		}
+		if intVal != 0 && intVal != 1 {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "compress_msg must be DSQL_FALSE (0) or DSQL_TRUE (1)"}
+			return DSQL_ERROR
+		}
+		conn.compressMsg = intVal
+	case DSQL_ATTR_USE_STMT_POOL:
+		if intVal != 0 {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "use_stmt_pool is not supported by this bridge"}
+			return DSQL_ERROR
+		}
 	case DSQL_ATTR_SSL_PATH, DSQL_ATTR_SSL_PWD, DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN:
 		if val != nil && C.GoString((*C.char)(val)) != "" {
 			name := map[int32]string{
@@ -236,8 +253,7 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 			conn.lastErr = &diagInfo{errorCode: -1, message: name + " is not supported by this bridge"}
 			return DSQL_ERROR
 		}
-	case DSQL_ATTR_COMPRESS_MSG, DSQL_ATTR_USE_STMT_POOL,
-		DSQL_ATTR_CURSOR_ROLLBACK_BEHAVIOR,
+	case DSQL_ATTR_CURSOR_ROLLBACK_BEHAVIOR,
 		DSQL_ATTR_OSAUTH_TYPE, DSQL_ATTR_DDL_AUTOCOMMIT,
 		DSQL_ATTR_COMPATIBLE_MODE, DSQL_ATTR_SHAKE_CRYPTO,
 		DSQL_ATTR_NLS_NUMERIC_CHARACTERS,
@@ -301,6 +317,20 @@ func dpi_get_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, bufLen C.sd
 			value = 25
 		}
 		*(*C.sdint4)(val) = C.sdint4(value)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_COMPRESS_MSG:
+		value := conn.compressMsg
+		if value < 0 {
+			value = 0
+		}
+		*(*C.sdint4)(val) = C.sdint4(value)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_USE_STMT_POOL:
+		*(*C.sdint4)(val) = 0
 		if valLen != nil {
 			*valLen = 4
 		}
@@ -448,6 +478,9 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	if conn.appName != "" {
 		params = append(params, "appName="+url.QueryEscape(conn.appName))
 	}
+	if conn.compressMsg >= 0 {
+		params = append(params, "compress="+strconv.Itoa(conn.compressMsg))
+	}
 	if conn.svcPath != "" {
 		params = append(params, "svcConfPath="+url.QueryEscape(filepath.Join(conn.svcPath, "dm_svc.conf")))
 	}
@@ -512,6 +545,11 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 
 	conn.db = db
 	conn.conn = dmConn
+	if dmConn.CompressionMode() != 0 {
+		conn.compressMsg = 1
+	} else {
+		conn.compressMsg = 0
+	}
 
 	// Try to get server version
 	var version string

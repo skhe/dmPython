@@ -137,6 +137,8 @@ dmPython.connect(
 - `packet_size`
 - `port`
 
+`compress_msg` 仅在建连时接受 `DSQL_FALSE` 或 `DSQL_TRUE`，属性读回为协商后的布尔压缩状态。语句句柄缓存尚未实现：`use_stmt_pool=0` 可用，`use_stmt_pool=1` 会报错。
+
 只读：
 
 - `server_code`

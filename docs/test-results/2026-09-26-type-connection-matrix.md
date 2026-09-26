@@ -14,7 +14,7 @@
 | 空值 | 整数、十进制、文本、二进制、日期、时间戳列的 `NULL` 往返 |
 | 连接地址 | `server`、`host`、`dsn=host:port` 均可连接；`host` 与 `server` 同时传入会报错 |
 | 连接行为 | 默认元组与 `DictCursor` 行形状、`schema`、`autoCommit` 开关及开启后无需显式提交的持久化、`txn_isolation` 读回 |
-| 选项基础检查 | 非数字 `port` 报错；`connection_timeout`、`login_timeout`、`compress_msg`、`use_stmt_pool` 可建连并执行查询 |
+| 选项基础检查 | 非数字 `port` 报错；`connection_timeout`、`login_timeout` 可建连并执行查询；消息压缩和语句池行为见下文 |
 
 `DECIMAL`、`FLOAT`、`DOUBLE`、`TIME`、`TIMESTAMP` 在当前默认读取路径通常返回字符串。矩阵断言数值或时间内容，同时保留未来改善 Python 返回类型的空间。
 
@@ -65,3 +65,7 @@
 ## 后续修复：区间子类型
 
 桥接层原先只识别 `DAY TO SECOND` 和 `YEAR TO MONTH` 两种区间列；真实 DM8 中其余 11 种区间限定形式均被读成普通字符串。现在按 DPI 类型码识别全部 13 种形式。`DAY`、`HOUR`、`MINUTE`、`SECOND` 及其组合读为 `datetime.timedelta`，`YEAR`、`MONTH` 和 `YEAR TO MONTH` 保留 `dmPython.YEAR_MONTH_INTERVAL` 描述类型；部分子类型的正负 `timedelta` 写入也验证通过。Python 3.10 在 UTF-8 和 GB18030 官方 ARM DM8 实例上的完整真实库回归各为 **183 passed、0 skipped**，另各有 2 个非真实库用例未选入。
+
+## 后续修复：连接消息压缩
+
+`compress_msg` 原先被静默忽略；现在只接受 `DSQL_FALSE`/`DSQL_TRUE`，将选择传给 Go 驱动并从协商后的连接状态读回。两种取值均已在真实 DM8 上建连和查询成功。底层 Go 驱动只解析 `StmtPoolSize`，没有使用对应缓存大小；因此显式请求 `use_stmt_pool=1` 现在会报不支持，`use_stmt_pool=0` 可用。语句句柄缓存仍待实现。
