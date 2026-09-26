@@ -19,5 +19,17 @@ Real DM8 ARM verification:
   containing high-precision decimals and null elements.
 
 The vendored Go tests also exercise malformed nested elements and the modern
-SSL CA/hostname validation path. Cross-schema object arrays and other DM8
-server versions still need dedicated regression environments.
+SSL CA/hostname validation path. Other DM8 server versions still need dedicated
+regression environments.
+
+Cross-schema regression added in [PR #23](https://github.com/skhe/dmPython/pull/23):
+the test account creates same-named types, then reads a SYSDBA VARRAY of
+objects from both a SYSDBA table and a table it owns. Both reads preserve the
+foreign type owner, `DECIMAL(30,8)`, and Unicode text. The fix uses the server's
+type schema ID rather than the result table owner. All PR checks passed,
+including the ten ARM Linux real-database combinations across Python 3.9–3.13
+and both Unicode modes.
+
+The follow-up also reads a direct SYSDBA object type through a table owned by
+the test account, with the same-named local object present. The focused GB18030
+real-database check passed.
