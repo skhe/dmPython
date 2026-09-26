@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import socket
+import subprocess
+import sys
+
 import pytest
 
 import dmPython
@@ -101,3 +106,57 @@ def test_optional_setting_connects_and_queries(conn_params, option):
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
             assert cur.fetchone() == (1,)
+
+
+def test_connection_timeout_options_are_reported(conn_params):
+    with dmPython.connect(
+        **conn_params,
+        login_timeout=2,
+        connection_timeout=2,
+        app_name="dmpython & matrix+1",
+    ) as conn:
+        assert conn.login_timeout == 2
+        assert conn.connection_timeout == 2
+        assert conn.app_name == "dmpython & matrix+1"
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            assert cur.fetchone() == (1,)
+
+
+def test_login_timeout_interrupts_unresponsive_handshake():
+    code = """
+import dmPython
+import sys
+import time
+
+start = time.monotonic()
+try:
+    dmPython.connect(user="probe", password="probe", server="127.0.0.1",
+                     port=int(sys.argv[1]), login_timeout=1)
+except dmPython.Error:
+    print(time.monotonic() - start)
+else:
+    raise AssertionError("unresponsive server accepted a connection")
+"""
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        listener.settimeout(4)
+        child = subprocess.Popen(
+            [sys.executable, "-c", code, str(listener.getsockname()[1])],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=os.environ.copy(),
+        )
+        try:
+            peer, _ = listener.accept()
+            with peer:
+                stdout, stderr = child.communicate(timeout=4)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate()
+
+    assert child.returncode == 0, stderr
+    assert float(stdout.strip()) < 3

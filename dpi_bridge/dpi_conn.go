@@ -31,9 +31,11 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	dm "gitee.com/chunanyong/dm"
@@ -48,14 +50,15 @@ type connHandle struct {
 	tx   driver.Tx        // active transaction (nil if none)
 
 	// Connection parameters (set before login)
-	host       string
-	port       int
-	user       string
-	password   string
-	schema     string
-	autocommit bool
+	host         string
+	port         int
+	user         string
+	password     string
+	schema       string
+	autocommit   bool
 	loginTimeout int
 	connTimeout  int
+	appName      string
 	txnIsolation int
 
 	// Post-login info
@@ -128,11 +131,19 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		conn.autocommit = (intVal != 0)
 		// If already connected, apply autocommit
 		if conn.conn != nil {
-			conn.conn.Exec("SET TRANSACTION AUTOCOMMIT " + map[bool]string{true: "ON", false: "OFF"}[conn.autocommit], nil)
+			conn.conn.Exec("SET TRANSACTION AUTOCOMMIT "+map[bool]string{true: "ON", false: "OFF"}[conn.autocommit], nil)
 		}
 	case DSQL_ATTR_LOGIN_TIMEOUT:
+		if intVal < 0 {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "login timeout must be non-negative"}
+			return DSQL_ERROR
+		}
 		conn.loginTimeout = intVal
 	case DSQL_ATTR_CONNECTION_TIMEOUT:
+		if intVal < 0 {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "connection timeout must be non-negative"}
+			return DSQL_ERROR
+		}
 		conn.connTimeout = intVal
 	case DSQL_ATTR_TXN_ISOLATION:
 		conn.txnIsolation = intVal
@@ -154,8 +165,15 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		} else {
 			conn.schema = C.GoString((*C.char)(val))
 		}
-	case DSQL_ATTR_APP_NAME,
-		DSQL_ATTR_SSL_PATH, DSQL_ATTR_SSL_PWD,
+	case DSQL_ATTR_APP_NAME:
+		if val == nil {
+			conn.appName = ""
+		} else if valLen > 0 {
+			conn.appName = C.GoStringN((*C.char)(val), C.int(valLen))
+		} else {
+			conn.appName = C.GoString((*C.char)(val))
+		}
+	case DSQL_ATTR_SSL_PATH, DSQL_ATTR_SSL_PWD,
 		DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN,
 		DSQL_ATTR_COMPRESS_MSG, DSQL_ATTR_USE_STMT_POOL,
 		DSQL_ATTR_MPP_LOGIN, DSQL_ATTR_RWSEPARATE,
@@ -212,6 +230,21 @@ func dpi_get_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, bufLen C.sd
 		*(*C.sdint4)(val) = C.sdint4(conn.txnIsolation)
 		if valLen != nil {
 			*valLen = 4
+		}
+	case DSQL_ATTR_LOGIN_TIMEOUT:
+		*(*C.sdint4)(val) = C.sdint4(conn.loginTimeout)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_CONNECTION_TIMEOUT:
+		*(*C.sdint4)(val) = C.sdint4(conn.connTimeout)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_APP_NAME:
+		n := cStringLen((*C.sdbyte)(val), int(bufLen), conn.appName)
+		if valLen != nil {
+			*valLen = C.sdint4(n)
 		}
 	case DSQL_ATTR_CONNECTION_DEAD:
 		dead := C.sdint4(0) // DSQL_CD_FALSE
@@ -325,11 +358,11 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	} else {
 		params = append(params, "autoCommit=false")
 	}
-	if conn.loginTimeout > 0 {
-		params = append(params, fmt.Sprintf("loginTimeout=%d", conn.loginTimeout))
-	}
 	if conn.connTimeout > 0 {
-		params = append(params, fmt.Sprintf("socketTimeout=%d", conn.connTimeout*1000))
+		params = append(params, fmt.Sprintf("socketTimeout=%d", conn.connTimeout))
+	}
+	if conn.appName != "" {
+		params = append(params, "appName="+url.QueryEscape(conn.appName))
 	}
 	if len(params) > 0 {
 		dsn += "?" + strings.Join(params, "&")
@@ -346,6 +379,11 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 
 	// Force a real connection
 	ctx := context.Background()
+	if conn.loginTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(conn.loginTimeout)*time.Second)
+		defer cancel()
+	}
 	rawConn, dbErr := db.Conn(ctx)
 	if dbErr != nil {
 		db.Close()

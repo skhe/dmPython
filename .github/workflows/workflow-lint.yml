@@ -19,6 +19,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache-dependency-path: dpi_bridge/go.sum
+
+      - name: Test Go bridge and patched driver
+        run: |
+          (cd dpi_bridge && go test ./...)
+          (cd dpi_bridge/third_party/chunanyong_dm && go test ./...)
+
       - name: Install lint dependencies
         run: |
           python -m pip install --upgrade pip

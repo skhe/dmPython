@@ -47,10 +47,16 @@ func dm_build_426(dm_build_427 context.Context, dm_build_428 *DmConnection) (*dm
 	if dm_build_432 {
 		dm_build_429, dm_build_430 = dm_build_431(dm_build_427, dm_build_428.dmConnector.host+":"+strconv.Itoa(int(dm_build_428.dmConnector.port)))
 	} else {
-		dm_build_429, dm_build_430 = dm_build_434(dm_build_428.dmConnector.host+":"+strconv.Itoa(int(dm_build_428.dmConnector.port)), time.Duration(dm_build_428.dmConnector.socketTimeout)*time.Second)
+		dm_build_429, dm_build_430 = dm_build_434(dm_build_427, dm_build_428.dmConnector.host+":"+strconv.Itoa(int(dm_build_428.dmConnector.port)), time.Duration(dm_build_428.dmConnector.socketTimeout)*time.Second)
 	}
 	if dm_build_430 != nil {
 		return nil, dm_build_430
+	}
+	if deadline, ok := dm_build_427.Deadline(); ok {
+		if err := dm_build_429.SetDeadline(deadline); err != nil {
+			dm_build_429.Close()
+			return nil, err
+		}
 	}
 
 	dm_build_433 := dm_build_414{}
@@ -67,8 +73,8 @@ func dm_build_426(dm_build_427 context.Context, dm_build_428 *DmConnection) (*dm
 	return &dm_build_433, nil
 }
 
-func dm_build_434(dm_build_435 string, dm_build_436 time.Duration) (net.Conn, error) {
-	dm_build_437, dm_build_438 := net.DialTimeout("tcp", dm_build_435, dm_build_436)
+func dm_build_434(ctx context.Context, dm_build_435 string, dm_build_436 time.Duration) (net.Conn, error) {
+	dm_build_437, dm_build_438 := (&net.Dialer{Timeout: dm_build_436}).DialContext(ctx, "tcp", dm_build_435)
 	if dm_build_438 != nil {
 		return &net.TCPConn{}, ECGO_COMMUNITION_ERROR.addDetail("\tdial address: " + dm_build_435).throw()
 	}

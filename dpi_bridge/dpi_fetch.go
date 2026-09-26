@@ -51,6 +51,17 @@ typedef struct {
     udbyte  sign;
     udbyte  val[DPI_MAX_NUMERIC_LEN];
 } dpi_numeric_t;
+
+typedef struct {
+    int32_t interval_type;
+    int16_t interval_sign;
+    uint16_t reserved;
+    uint32_t day;
+    uint32_t hour;
+    uint32_t minute;
+    uint32_t second;
+    uint32_t fraction;
+} dpi_interval_dt_t;
 */
 import "C"
 import (
@@ -63,6 +74,8 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	dm "gitee.com/chunanyong/dm"
 )
 
 //export dpi_number_columns
@@ -329,7 +342,10 @@ func dpi_fetch(hstmt C.dhstmt, rowNum *C.ulength) C.DPIRETURN {
 					rowBind.actLenPtr = (*C.slength)(unsafe.Pointer(uintptr(unsafe.Pointer(bind.actLenPtr)) + uintptr(fetched)*ei.indStride))
 				}
 			}
-			writeValueToBinding(row[colIdx-1], rowBind, stmt.columns[colIdx-1].sqlType)
+			if err := writeValueToBinding(row[colIdx-1], rowBind, stmt.columns[colIdx-1].sqlType); err != nil {
+				stmt.lastErr = diagFromError(err)
+				return DSQL_ERROR
+			}
 		}
 
 		stmt.fetchPos++
@@ -383,6 +399,8 @@ func cTypeSize(cType int16) uintptr {
 		return unsafe.Sizeof(C.dpi_time_t{})
 	case DSQL_C_NUMERIC:
 		return 19 // DPI_MAX_NUMERIC_LEN(16) + precision + scale + sign
+	case DSQL_C_INTERVAL_DAY_TO_SECOND:
+		return unsafe.Sizeof(C.dpi_interval_dt_t{})
 	default:
 		return 0 // variable-length (string, binary, etc.)
 	}
@@ -430,7 +448,10 @@ func dpi_get_data(hstmt C.dhstmt, icol C.udint2, ctype C.sdint2,
 		sqlType = stmt.columns[idx].sqlType
 	}
 
-	writeValueToBinding(rawVal, bind, sqlType)
+	if err := writeValueToBinding(rawVal, bind, sqlType); err != nil {
+		stmt.lastErr = diagFromError(err)
+		return DSQL_ERROR
+	}
 	return DSQL_SUCCESS
 }
 
@@ -494,12 +515,12 @@ func dpi_row_count(hstmt C.dhstmt, rowNum *C.sdint8) C.DPIRETURN {
 }
 
 // writeValueToBinding writes a Go value into a C buffer according to the binding info.
-func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) {
+func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) error {
 	if val == nil {
 		if bind.indPtr != nil {
 			*bind.indPtr = C.slength(DSQL_NULL_DATA)
 		}
-		return
+		return nil
 	}
 
 	if bind.dataPtr == nil {
@@ -508,7 +529,7 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) {
 		if bind.indPtr != nil {
 			*bind.indPtr = C.slength(len(s))
 		}
-		return
+		return nil
 	}
 
 	cType := bind.cType
@@ -554,12 +575,45 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) {
 		writeTimeValue(val, bind)
 	case DSQL_C_NUMERIC:
 		writeNumericValue(val, bind)
+	case DSQL_C_INTERVAL_DAY_TO_SECOND:
+		return writeIntervalDaySecondValue(val, bind)
 	case DSQL_C_LOB_HANDLE:
 		writeLobHandleValue(val, bind, sqlType)
 	default:
 		// Default: treat as string
 		writeStringValue(val, bind)
 	}
+	return nil
+}
+
+func writeIntervalDaySecondValue(val interface{}, bind bindColInfo) error {
+	if bind.bufLen < int64(unsafe.Sizeof(C.dpi_interval_dt_t{})) {
+		return fmt.Errorf("interval binding buffer is too small")
+	}
+	value := fmt.Sprint(val)
+	interval, err := dm.NewDmIntervalDTByString(value)
+	if err != nil {
+		return fmt.Errorf("invalid day-second interval %q: %w", value, err)
+	}
+	data := (*C.dpi_interval_dt_t)(bind.dataPtr)
+	data.interval_type = 10 // DSQL_IS_DAY_TO_SECOND
+	data.interval_sign = 0
+	part := strings.TrimSpace(strings.TrimPrefix(strings.ToUpper(value), "INTERVAL"))
+	if strings.HasPrefix(part, "-") || strings.HasPrefix(part, "'-") {
+		data.interval_sign = 1
+	}
+	data.day = C.uint32_t(interval.GetDay())
+	data.hour = C.uint32_t(interval.GetHour())
+	data.minute = C.uint32_t(interval.GetMinute())
+	data.second = C.uint32_t(interval.GetSecond())
+	data.fraction = C.uint32_t(interval.GetMsec() * 1000)
+	if bind.indPtr != nil {
+		*bind.indPtr = C.slength(unsafe.Sizeof(C.dpi_interval_dt_t{}))
+	}
+	if bind.actLenPtr != nil {
+		*bind.actLenPtr = C.slength(unsafe.Sizeof(C.dpi_interval_dt_t{}))
+	}
+	return nil
 }
 
 func writeStringValue(val interface{}, bind bindColInfo) {
@@ -1139,6 +1193,15 @@ func extractBoundValue(bind bindParamInfo) interface{} {
 	case DSQL_C_NUMERIC:
 		num := (*C.dpi_numeric_t)(bind.dataPtr)
 		return numericToString(num)
+	case DSQL_C_INTERVAL_DAY_TO_SECOND:
+		interval := (*C.dpi_interval_dt_t)(bind.dataPtr)
+		sign := ""
+		if interval.interval_sign != 0 {
+			sign = "-"
+		}
+		return fmt.Sprintf("INTERVAL '%s%d %02d:%02d:%02d.%06d' DAY(9) TO SECOND(6)",
+			sign, interval.day, interval.hour, interval.minute,
+			interval.second, interval.fraction/1000)
 	case DSQL_C_LOB_HANDLE:
 		hlob := *(*C.dhloblctr)(bind.dataPtr)
 		if hlob == nil {
