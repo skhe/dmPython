@@ -235,8 +235,10 @@ func getRowDescField(stmt *stmtHandle, idx int, fieldID int16, val C.dpointer, v
 		return DSQL_SUCCESS
 
 	case DSQL_DESC_OBJ_DESCRIPTOR:
-		// Return nil object descriptor
-		*(*C.dpointer)(val) = nil
+		if idx < 0 || idx >= len(stmt.columns) {
+			return DSQL_ERROR
+		}
+		*(*C.dpointer)(val) = C.dpointer(handleToPtr(stmt.columns[idx].objectDescID))
 		return DSQL_SUCCESS
 
 	default:

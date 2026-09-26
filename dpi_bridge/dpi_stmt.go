@@ -36,13 +36,15 @@ import (
 
 // columnInfo holds metadata about a result set column.
 type columnInfo struct {
-	name        string
-	sqlType     int16
-	precision   uint64
-	scale       int16
-	nullable    int16
-	displaySize int64
-	tableName   string
+	name         string
+	sqlType      int16
+	precision    uint64
+	scale        int16
+	nullable     int16
+	displaySize  int64
+	tableName    string
+	objectDesc   *objDescHandle
+	objectDescID uintptr
 }
 
 // paramInfo holds metadata about a statement parameter.
@@ -606,6 +608,13 @@ func populateColumnInfo(stmt *stmtHandle) {
 		}
 
 		col.sqlType, col.precision, col.scale, col.displaySize = mapGoTypeToDPI(ct)
+		if col.sqlType == DSQL_VARCHAR {
+			if desc, id, err := stmt.conn.columnObjectDesc(ct.DatabaseTypeName()); err == nil {
+				col.sqlType = desc.sqlType
+				col.objectDesc = desc
+				col.objectDescID = id
+			}
+		}
 
 		nullable, ok := ct.Nullable()
 		if ok {

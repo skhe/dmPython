@@ -21,6 +21,7 @@ typedef dhandle         dhcon;
 typedef dhandle         dhstmt;
 typedef dhandle         dhdesc;
 typedef dhandle         dhloblctr;
+typedef dhandle         dhobj;
 
 typedef struct {
     sdint2  year;
@@ -342,7 +343,8 @@ func dpi_fetch(hstmt C.dhstmt, rowNum *C.ulength) C.DPIRETURN {
 					rowBind.actLenPtr = (*C.slength)(unsafe.Pointer(uintptr(unsafe.Pointer(bind.actLenPtr)) + uintptr(fetched)*ei.indStride))
 				}
 			}
-			if err := writeValueToBinding(row[colIdx-1], rowBind, stmt.columns[colIdx-1].sqlType); err != nil {
+			col := stmt.columns[colIdx-1]
+			if err := writeValueToBinding(row[colIdx-1], rowBind, col.sqlType, col.objectDesc); err != nil {
 				stmt.lastErr = diagFromError(err)
 				return DSQL_ERROR
 			}
@@ -401,6 +403,8 @@ func cTypeSize(cType int16) uintptr {
 		return 19 // DPI_MAX_NUMERIC_LEN(16) + precision + scale + sign
 	case DSQL_C_INTERVAL_DAY_TO_SECOND:
 		return unsafe.Sizeof(C.dpi_interval_dt_t{})
+	case DSQL_C_CLASS, DSQL_C_RECORD, DSQL_C_ARRAY, DSQL_C_SARRAY:
+		return unsafe.Sizeof(uintptr(0))
 	default:
 		return 0 // variable-length (string, binary, etc.)
 	}
@@ -444,11 +448,13 @@ func dpi_get_data(hstmt C.dhstmt, icol C.udint2, ctype C.sdint2,
 	}
 
 	sqlType := int16(DSQL_VARCHAR)
+	var objectDesc *objDescHandle
 	if idx < len(stmt.columns) {
 		sqlType = stmt.columns[idx].sqlType
+		objectDesc = stmt.columns[idx].objectDesc
 	}
 
-	if err := writeValueToBinding(rawVal, bind, sqlType); err != nil {
+	if err := writeValueToBinding(rawVal, bind, sqlType, objectDesc); err != nil {
 		stmt.lastErr = diagFromError(err)
 		return DSQL_ERROR
 	}
@@ -515,7 +521,7 @@ func dpi_row_count(hstmt C.dhstmt, rowNum *C.sdint8) C.DPIRETURN {
 }
 
 // writeValueToBinding writes a Go value into a C buffer according to the binding info.
-func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) error {
+func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16, objectDesc *objDescHandle) error {
 	if val == nil {
 		if bind.indPtr != nil {
 			*bind.indPtr = C.slength(DSQL_NULL_DATA)
@@ -579,6 +585,19 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) error
 		return writeIntervalDaySecondValue(val, bind)
 	case DSQL_C_LOB_HANDLE:
 		writeLobHandleValue(val, bind, sqlType)
+	case DSQL_C_CLASS, DSQL_C_RECORD:
+		hobj := *(*C.dhobj)(bind.dataPtr)
+		if hobj == nil {
+			id := allocHandle(&objHandle{})
+			hobj = C.dhobj(handleToPtr(id))
+			*(*C.dhobj)(bind.dataPtr) = hobj
+		}
+		if err := fillObjectHandle(val, unsafe.Pointer(hobj), objectDesc); err != nil {
+			return err
+		}
+		if bind.indPtr != nil {
+			*bind.indPtr = C.slength(unsafe.Sizeof(hobj))
+		}
 	default:
 		// Default: treat as string
 		writeStringValue(val, bind)
@@ -1220,6 +1239,14 @@ func extractBoundValue(bind bindParamInfo) interface{} {
 			return string(data)
 		}
 		return data
+	case DSQL_C_CLASS, DSQL_C_RECORD:
+		hobj := *(*C.dhobj)(bind.dataPtr)
+		value, ok := getHandle(ptrToHandle(unsafe.Pointer(hobj)))
+		obj, typed := value.(*objHandle)
+		if !ok || !typed || obj.desc == nil {
+			return nil
+		}
+		return obj.driverValue()
 	default:
 		// Treat as string
 		if bind.indPtr != nil && *bind.indPtr >= 0 {
