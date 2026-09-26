@@ -22,11 +22,11 @@ import (
 // var dmHome = flag.String("DM_HOME", "", "Where DMDB installed")
 var flagLock = sync.Mutex{}
 
-func NewTLSFromTCP(conn net.Conn, sslCertPath, sslKeyPath, sslFilesPath, serverName string) (*tls.Conn, error) {
+func NewTLSFromTCP(conn net.Conn, sslCertPath, sslKeyPath, sslFilesPath, serverName, sslKeyPassword string) (*tls.Conn, error) {
 	if sslCertPath == "" || sslKeyPath == "" || sslFilesPath == "" {
 		return nil, errors.New("SSL certificate, key, and CA directory are required")
 	}
-	cert, err := tls.LoadX509KeyPair(sslCertPath, sslKeyPath)
+	cert, err := loadClientKeyPair(sslCertPath, sslKeyPath, sslKeyPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -86,4 +86,38 @@ func NewTLSFromTCP(conn net.Conn, sslCertPath, sslKeyPath, sslFilesPath, serverN
 		return nil, err
 	}
 	return tlsConn, nil
+}
+
+func loadClientKeyPair(certPath, keyPath, password string) (tls.Certificate, error) {
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	block, _ := pem.Decode(keyPEM)
+	if block == nil {
+		return tls.Certificate{}, errors.New("SSL private key is not PEM encoded")
+	}
+	if block.Type == "ENCRYPTED PRIVATE KEY" {
+		return tls.Certificate{}, errors.New("encrypted PKCS#8 SSL private keys are not supported")
+	}
+	if !x509.IsEncryptedPEMBlock(block) {
+		return tls.LoadX509KeyPair(certPath, keyPath)
+	}
+	if password == "" {
+		return tls.Certificate{}, errors.New("encrypted SSL private key requires ssl_pwd")
+	}
+	der, err := x509.DecryptPEMBlock(block, []byte(password))
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to decrypt SSL private key: %w", err)
+	}
+	defer func() {
+		for i := range der {
+			der[i] = 0
+		}
+	}()
+	certPEM, err := os.ReadFile(certPath)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.X509KeyPair(certPEM, pem.EncodeToMemory(&pem.Block{Type: block.Type, Bytes: der}))
 }

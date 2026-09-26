@@ -62,6 +62,7 @@ type connHandle struct {
 	appName       string
 	compressMsg   int
 	sslPath       string
+	sslPassword   string
 	svcPath       string
 	mppLogin      int
 	rwSeparate    int
@@ -257,10 +258,21 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		} else {
 			conn.sslPath = C.GoString((*C.char)(val))
 		}
-	case DSQL_ATTR_SSL_PWD, DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN:
+	case DSQL_ATTR_SSL_PWD:
+		if conn.conn != nil {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "ssl_pwd can only be set before login"}
+			return DSQL_ERROR
+		}
+		if val == nil {
+			conn.sslPassword = ""
+		} else if valLen > 0 {
+			conn.sslPassword = C.GoStringN((*C.char)(val), C.int(valLen))
+		} else {
+			conn.sslPassword = C.GoString((*C.char)(val))
+		}
+	case DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN:
 		if val != nil && C.GoString((*C.char)(val)) != "" {
 			name := map[int32]string{
-				DSQL_ATTR_SSL_PWD: "ssl_pwd",
 				DSQL_ATTR_UKEY_NAME: "ukey_name", DSQL_ATTR_UKEY_PIN: "ukey_pin",
 			}[attr]
 			conn.lastErr = &diagInfo{errorCode: -1, message: name + " is not supported by this bridge"}
@@ -501,6 +513,13 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	}
 	if conn.sslPath != "" {
 		params = append(params, "sslFilesPath="+url.QueryEscape(conn.sslPath))
+	}
+	if conn.sslPassword != "" {
+		if conn.sslPath == "" {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "ssl_pwd requires ssl_path"}
+			return DSQL_ERROR
+		}
+		params = append(params, "sslKeyPassword="+url.QueryEscape(conn.sslPassword))
 	}
 	if conn.svcPath != "" {
 		params = append(params, "svcConfPath="+url.QueryEscape(filepath.Join(conn.svcPath, "dm_svc.conf")))

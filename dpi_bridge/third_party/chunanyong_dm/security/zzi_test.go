@@ -86,7 +86,7 @@ func testTLSFiles(t *testing.T) (string, tls.Certificate) {
 	return dir, serverCert
 }
 
-func testTLSHandshake(t *testing.T, dir string, serverCert tls.Certificate, serverName string) error {
+func testTLSHandshake(t *testing.T, dir string, serverCert tls.Certificate, serverName, password string) error {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -108,7 +108,7 @@ func testTLSHandshake(t *testing.T, dir string, serverCert tls.Certificate, serv
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := NewTLSFromTCP(clientSocket, filepath.Join(dir, "client-cert.pem"), filepath.Join(dir, "client-key.pem"), dir, serverName)
+	client, err := NewTLSFromTCP(clientSocket, filepath.Join(dir, "client-cert.pem"), filepath.Join(dir, "client-key.pem"), dir, serverName, password)
 	if client != nil {
 		client.Close()
 	} else {
@@ -120,18 +120,45 @@ func testTLSHandshake(t *testing.T, dir string, serverCert tls.Certificate, serv
 
 func TestModernServerCertificateVerification(t *testing.T) {
 	dir, serverCert := testTLSFiles(t)
-	if err := testTLSHandshake(t, dir, serverCert, "localhost"); err != nil {
+	if err := testTLSHandshake(t, dir, serverCert, "localhost", ""); err != nil {
 		t.Fatalf("trusted DNS name: %v", err)
 	}
-	if err := testTLSHandshake(t, dir, serverCert, "[::1]"); err != nil {
+	if err := testTLSHandshake(t, dir, serverCert, "[::1]", ""); err != nil {
 		t.Fatalf("trusted bracketed IPv6: %v", err)
 	}
-	if err := testTLSHandshake(t, dir, serverCert, "wrong.example"); err == nil || !strings.Contains(err.Error(), "not wrong.example") {
+	if err := testTLSHandshake(t, dir, serverCert, "wrong.example", ""); err == nil || !strings.Contains(err.Error(), "not wrong.example") {
 		t.Fatalf("wrong hostname should fail verification, got %v", err)
 	}
 	untrustedCA, _, _ := testCA(t)
 	writeTestFile(t, filepath.Join(dir, "ca-cert.pem"), untrustedCA)
-	if err := testTLSHandshake(t, dir, serverCert, "localhost"); err == nil || !strings.Contains(err.Error(), "unknown authority") {
+	if err := testTLSHandshake(t, dir, serverCert, "localhost", ""); err == nil || !strings.Contains(err.Error(), "unknown authority") {
 		t.Fatalf("untrusted CA should fail verification, got %v", err)
+	}
+}
+
+func TestEncryptedClientKey(t *testing.T) {
+	dir, serverCert := testTLSFiles(t)
+	keyPath := filepath.Join(dir, "client-key.pem")
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(keyPEM)
+	if block == nil {
+		t.Fatal("missing private key")
+	}
+	password := "test+ssl&pwd 123"
+	encrypted, err := x509.EncryptPEMBlock(rand.Reader, block.Type, block.Bytes, []byte(password), x509.PEMCipherAES256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, keyPath, pem.EncodeToMemory(encrypted))
+	if err := testTLSHandshake(t, dir, serverCert, "localhost", password); err != nil {
+		t.Fatalf("correct ssl_pwd: %v", err)
+	}
+	for _, wrong := range []string{"", "wrong-password"} {
+		if err := testTLSHandshake(t, dir, serverCert, "localhost", wrong); err == nil {
+			t.Fatalf("ssl_pwd %q should fail", wrong)
+		}
 	}
 }

@@ -19,4 +19,11 @@
 The local test uses DM8's bundled legacy certificate without SAN, so it
 exercises exact certificate pinning. CA and hostname verification for modern
 SAN certificates is implemented but needs a server with a modern certificate
-for an end-to-end regression. `ssl_pwd` and UKey login remain unsupported.
+for an end-to-end regression.
+
+The ARM macOS Python 3.10 extension also connected to the SSL-enabled DM8
+instance with the bundled RSA client key re-encrypted in traditional PEM
+format. `ssl_pwd="test+ssl&pwd 123"` succeeded and executed a query; a missing
+or wrong password failed. All five SSL tests passed locally. The password
+without `ssl_path` was rejected on the ordinary DM8 instance. Encrypted
+PKCS#8 keys and UKey login remain unsupported.
