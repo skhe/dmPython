@@ -15,6 +15,8 @@ pytestmark = [pytest.mark.requires_dm, pytest.mark.p1_contract]
 
 _TZ_PLUS_0530 = dt.timezone(dt.timedelta(hours=5, minutes=30))
 _TZ_MINUS_0400 = dt.timezone(-dt.timedelta(hours=4))
+_TZ_PLUS_1400 = dt.timezone(dt.timedelta(hours=14))
+_TZ_MINUS_1259 = dt.timezone(-dt.timedelta(hours=12, minutes=59))
 _AWARE_TIME = dt.time(12, 34, 56, 123456, tzinfo=_TZ_PLUS_0530)
 _AWARE_TIMESTAMP = dt.datetime(2024, 2, 29, 12, 34, 56, 123456, tzinfo=_TZ_PLUS_0530)
 
@@ -97,8 +99,13 @@ def test_typed_null_roundtrip(conn, table_name_factory, drop_table, sql_type):
         ("12345678901234567890.12345678", Decimal("12345678901234567890.12345678")),
         (Decimal("-12345678901234567890.12345678"), Decimal("-12345678901234567890.12345678")),
         ("1234567890123456789012345678E-8", Decimal("12345678901234567890.12345678")),
+        (Decimal("9999999999999999999999.99999999"), Decimal("9999999999999999999999.99999999")),
+        (Decimal("-9999999999999999999999.99999999"), Decimal("-9999999999999999999999.99999999")),
+        (Decimal("0.00000001"), Decimal("0.00000001")),
+        (Decimal("-0.00000001"), Decimal("-0.00000001")),
+        (Decimal("0"), Decimal("0")),
     ],
-    ids=["decimal", "text", "negative", "scientific"],
+    ids=["decimal", "text", "negative", "scientific", "max", "min", "epsilon", "negative-epsilon", "zero"],
 )
 def test_high_precision_decimal_parameter_preserves_fraction(
     conn, table_name_factory, drop_table, value, expected
@@ -111,6 +118,35 @@ def test_high_precision_decimal_parameter_preserves_fraction(
         conn.commit()
         cur.execute(f"SELECT CAST(v AS VARCHAR(80)) FROM {table}")
         assert Decimal(cur.fetchone()[0]) == expected
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
+
+
+def test_high_precision_decimal_executemany_preserves_fraction(
+    conn, table_name_factory, drop_table
+):
+    table = table_name_factory("DMPY_DECIMAL_BATCH")
+    cases = [
+        (Decimal("9999999999999999999999.99999999"), Decimal("9999999999999999999999.99999999")),
+        ("12345678901234567890.12345678", Decimal("12345678901234567890.12345678")),
+        (None, None),
+        (Decimal("-9999999999999999999999.99999999"), Decimal("-9999999999999999999999.99999999")),
+        ("1E-8", Decimal("0.00000001")),
+    ]
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (id INTEGER, v DECIMAL(30, 8))")
+        cur.executemany(
+            f"INSERT INTO {table} VALUES (?, ?)",
+            [(index, value) for index, (value, _) in enumerate(cases)],
+        )
+        conn.commit()
+        cur.execute(f"SELECT CAST(v AS VARCHAR(80)) FROM {table} ORDER BY id")
+        assert [None if row[0] is None else Decimal(row[0]) for row in cur.fetchall()] == [
+            expected for _, expected in cases
+        ]
     finally:
         drop_table(cur, table)
         conn.commit()
@@ -144,8 +180,35 @@ def test_high_precision_decimal_parameter_preserves_fraction(
             dt.datetime(2024, 2, 29, 12, 34, 56, 123456, tzinfo=_TZ_MINUS_0400),
             dt.datetime.fromisoformat,
         ),
+        (
+            "TIME(6) WITH TIME ZONE",
+            dt.time(0, 0, 1, 1, tzinfo=_TZ_PLUS_1400),
+            dt.time(0, 0, 1, 1, tzinfo=_TZ_PLUS_1400),
+            dt.time.fromisoformat,
+        ),
+        (
+            "TIME(6) WITH TIME ZONE",
+            dt.time(23, 59, 59, 999999, tzinfo=_TZ_MINUS_1259),
+            dt.time(23, 59, 59, 999999, tzinfo=_TZ_MINUS_1259),
+            dt.time.fromisoformat,
+        ),
+        (
+            "TIMESTAMP WITH TIME ZONE",
+            dt.datetime(2024, 12, 31, 23, 59, 59, 999999, tzinfo=_TZ_PLUS_1400),
+            dt.datetime(2024, 12, 31, 23, 59, 59, 999999, tzinfo=_TZ_PLUS_1400),
+            dt.datetime.fromisoformat,
+        ),
+        (
+            "TIMESTAMP WITH TIME ZONE",
+            dt.datetime(2024, 1, 1, 0, 0, 1, 1, tzinfo=_TZ_MINUS_1259),
+            dt.datetime(2024, 1, 1, 0, 0, 1, 1, tzinfo=_TZ_MINUS_1259),
+            dt.datetime.fromisoformat,
+        ),
     ],
-    ids=["aware-time", "aware-timestamp", "text-time", "text-timestamp"],
+    ids=[
+        "aware-time", "aware-timestamp", "text-time", "text-timestamp",
+        "time-plus-1400", "time-minus-1259", "timestamp-plus-1400", "timestamp-minus-1259",
+    ],
 )
 def test_timezone_time_roundtrip_preserves_instant(
     conn, table_name_factory, drop_table, sql_type, value, expected, parse
