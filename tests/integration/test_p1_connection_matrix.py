@@ -260,8 +260,7 @@ def test_port_rejects_non_numeric_value(conn_params):
     [
         {"connection_timeout": 5},
         {"login_timeout": 5000},
-        {"compress_msg": 0},
-        {"use_stmt_pool": 1},
+        {"use_stmt_pool": 0},
     ],
 )
 def test_optional_setting_connects_and_queries(conn_params, option):
@@ -269,6 +268,34 @@ def test_optional_setting_connects_and_queries(conn_params, option):
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
             assert cur.fetchone() == (1,)
+
+
+@pytest.mark.parametrize("enabled", [dmPython.DSQL_FALSE, dmPython.DSQL_TRUE])
+def test_compress_msg_is_applied(conn_params, enabled):
+    with dmPython.connect(**conn_params, compress_msg=enabled) as conn:
+        assert conn.compress_msg == enabled
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            assert cur.fetchone() == (1,)
+
+
+@pytest.mark.parametrize("value", [-1, 2])
+def test_compress_msg_rejects_invalid_values(conn_params, value):
+    with pytest.raises((dmPython.Error, OverflowError)) as exc:
+        dmPython.connect(**conn_params, compress_msg=value)
+    if isinstance(exc.value, dmPython.Error):
+        assert "compress_msg" in str(exc.value)
+
+
+def test_use_stmt_pool_rejects_unavailable_cache(conn_params):
+    with pytest.raises(dmPython.Error, match="use_stmt_pool.*not supported"):
+        dmPython.connect(**conn_params, use_stmt_pool=1)
+
+
+def test_compress_msg_rejects_post_login_change(conn_params):
+    with dmPython.connect(**conn_params) as conn:
+        with pytest.raises(dmPython.Error, match="before login"):
+            conn.compress_msg = dmPython.DSQL_TRUE
 
 
 def test_connection_timeout_options_are_reported(conn_params):

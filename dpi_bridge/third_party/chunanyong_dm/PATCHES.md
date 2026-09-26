@@ -43,6 +43,15 @@
   against both UTF-8 and GB18030 databases; `clob_encoding_test.go` covers
   ASCII, two-byte, and four-byte boundaries.
 
+## Patch: expose negotiated compression mode
+
+- File: `bridge_options.go`
+- Expose the negotiated compression mode so the DPI bridge can report the
+  effective `compress_msg` setting after login rather than only echoing the
+  requested value.
+- Regression: `test_compress_msg_is_applied` connects with compression both
+  disabled and enabled against a real DM8 instance.
+
 ## Patch: initial connection timeout through endpoint groups
 
 - Files: `a.go`, `n.go`, `x.go`, `y.go`, `m.go`
