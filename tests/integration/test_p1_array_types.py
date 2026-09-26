@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from decimal import Decimal
 
 import pytest
@@ -188,3 +189,64 @@ def test_varray_of_varray_keeps_decimal_elements(conn, table_name_factory, drop_
                     cleanup.execute(f"DROP TYPE {name}")
         conn.commit()
         cur.close()
+
+
+def test_cross_schema_varray_of_objects(conn, conn_params, table_name_factory):
+    admin_password = os.environ.get("DM_CI_ADMIN_PASSWORD")
+    if not admin_password:
+        pytest.skip("cross-schema type regression requires the admin test password")
+
+    object_type = table_name_factory("DMPY_SHARED_ITEM")
+    array_type = table_name_factory("DMPY_SHARED_ARRAY")
+    table = table_name_factory("DMPY_SHARED_TAB")
+    local_table = table_name_factory("DMPY_REF_SHARED")
+    values = [[Decimal("12345678901234567890.12345678"), "汉字"], None]
+    admin = dmPython.connect(**{**conn_params, "user": "SYSDBA", "password": admin_password})
+    created = []
+    local_created = []
+    try:
+        with admin.cursor() as cur:
+            cur.execute(f"CREATE TYPE {object_type} AS OBJECT (AMOUNT DECIMAL(30,8), LABEL VARCHAR(20))")
+            created.append(("TYPE", object_type))
+            cur.execute(f"CREATE TYPE {array_type} AS VARRAY(2) OF {object_type}")
+            created.append(("TYPE", array_type))
+            cur.execute(f"CREATE TABLE {table} (V {array_type})")
+            created.append(("TABLE", table))
+            cur.execute(f"GRANT EXECUTE ON {object_type} TO {conn_params['user']}")
+            cur.execute(f"GRANT EXECUTE ON {array_type} TO {conn_params['user']}")
+            cur.execute(f"GRANT SELECT, INSERT ON {table} TO {conn_params['user']}")
+        admin.commit()
+
+        # A same-named type in the reader schema must not shadow SYSDBA's type.
+        with conn.cursor() as cur:
+            cur.execute(f"CREATE TYPE {object_type} AS OBJECT (FLAG INTEGER)")
+            local_created.append(("TYPE", object_type))
+            cur.execute(f"CREATE TYPE {array_type} AS VARRAY(2) OF {object_type}")
+            local_created.append(("TYPE", array_type))
+            cur.execute(f"CREATE TABLE {local_table} (V SYSDBA.{array_type})")
+            local_created.append(("TABLE", local_table))
+        conn.commit()
+
+        value = dmPython.objectvar(conn, array_type, schema="SYSDBA")
+        assert value.type.schema == "SYSDBA"
+        value.setvalue(values)
+        with conn.cursor() as cur:
+            cur.execute(f"INSERT INTO SYSDBA.{table} VALUES (?)", (value,))
+            cur.execute(f"INSERT INTO {local_table} VALUES (?)", (value,))
+            conn.commit()
+            for source in (f"SYSDBA.{table}", local_table):
+                cur.execute(f"SELECT V FROM {source}")
+                fetched = cur.fetchone()[0]
+                assert fetched.type.schema == "SYSDBA"
+                assert fetched.getvalue() == values
+    finally:
+        conn.rollback()
+        with conn.cursor() as cur:
+            for kind, name in reversed(local_created):
+                cur.execute(f"DROP {kind} {name}")
+        conn.commit()
+        with admin.cursor() as cur:
+            for kind, name in reversed(created):
+                cur.execute(f"DROP {kind} {name}")
+        admin.commit()
+        admin.close()
