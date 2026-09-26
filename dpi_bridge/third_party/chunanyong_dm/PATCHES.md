@@ -31,6 +31,18 @@
   - `test_clob_unicode_problem_patterns_length_contract`
   - `test_clob_unicode_problem_patterns_subprocess_no_crash`
 
+## Patch: GB18030 CLOB write boundaries
+
+- Files: `a.go`, `clob_encoding.go`
+- Problem: a 16,000-byte `PUT_DATA` chunk could split a GB18030 two- or
+  four-byte character. The CLOB content read back intact, but the database's
+  `LENGTH(c)` and `DBMS_LOB.GETLENGTH(c)` undercounted the characters.
+- Fix: end each full GB18030 CLOB chunk at a complete character. Binary and
+  other parameter types retain their existing chunking.
+- Regression: `test_clob_unicode_problem_patterns_length_contract` now runs
+  against both UTF-8 and GB18030 databases; `clob_encoding_test.go` covers
+  ASCII, two-byte, and four-byte boundaries.
+
 ## Patch: initial connection timeout through endpoint groups
 
 - Files: `a.go`, `n.go`, `x.go`, `y.go`, `m.go`

@@ -53,3 +53,7 @@
 ## 后续回归：十进制与时区边界
 
 `DECIMAL(30,8)` 的最大绝对值、正负最小非零值与零值单条写入通过；混合 `Decimal`、文本、科学计数法和 `NULL` 的 `executemany` 批量写入也保留精度。`TIME WITH TIME ZONE` 与 `TIMESTAMP WITH TIME ZONE` 在 `+14:00`、`-12:59` 偏移量和跨日附近的微秒值往返通过。本机官方 DM8 上 Python 3.9 至 3.13 各有 18 项针对性用例通过。
+
+## 后续修复：GB18030 大字段边界
+
+新增本机官方 ARM DM8 的 GB18030（`UNICODE=0`）隔离实例。修复前，包含中文和四字节 emoji 的 CLOB 跨越 16,000 字节写入边界时，文本读回虽完整，数据库的 `LENGTH(c)` 和 `DBMS_LOB.GETLENGTH(c)` 会少计 1 至 2 个字符。写入时现在让 GB18030 数据块结束在完整字符处。Python 3.10 在 UTF-8（`UNICODE=1`）和 GB18030 两套实例上的完整真实库回归各为 **166 passed、0 skipped**，另各有 2 个非真实库用例未选入。CI 增加 Python 3.9 至 3.13 × 两种编码的矩阵，并校验数据库实际 `UNICODE` 值；CI 结果待核实。
