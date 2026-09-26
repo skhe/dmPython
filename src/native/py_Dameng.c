@@ -413,6 +413,7 @@ module_add_oper_const(
 
     /** RWSEPERATE相关 **/
     PyModule_AddIntConstant(module, "DSQL_RWSEPARATE_ON", DSQL_RWSEPARATE_ON);
+    PyModule_AddIntConstant(module, "DSQL_RWSEPARATE_ON2", DSQL_RWSEPARATE_ON2);
     PyModule_AddIntConstant(module, "DSQL_RWSEPARATE_OFF", DSQL_RWSEPARATE_OFF);
 
     /** trx_state相关 **/

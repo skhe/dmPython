@@ -734,6 +734,7 @@ static int	Connection_SetConAttr(
 		case DSQL_ATTR_SERVER_CODE:
 		case DSQL_ATTR_USE_STMT_POOL:
 		case DSQL_ATTR_COMPRESS_MSG:
+        case DSQL_ATTR_MPP_LOGIN:
         case DSQL_ATTR_RWSEPARATE:
         case DSQL_ATTR_RWSEPARATE_PERCENT:
 			isNumVal = 1;
