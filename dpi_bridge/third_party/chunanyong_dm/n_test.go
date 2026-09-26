@@ -50,3 +50,15 @@ func TestServiceConfigLoadsNamedEndpoint(t *testing.T) {
 	}
 	load(path + ".missing") // A missing optional file must not panic.
 }
+
+func TestConnectorAppliesMppAndReadWriteOptions(t *testing.T) {
+	connector := new(DmConnector).init()
+	if err := connector.mergeConfigs(
+		"dm://user:pass@127.0.0.1:5236?mppLocal=true&rwSeparate=4&rwPercent=80",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if !connector.mppLocal || connector.rwSeparate != RW_SEPARATE_DB_APPLY_WAIT || connector.rwPercent != 80 {
+		t.Fatalf("MPP or read/write options were not applied")
+	}
+}

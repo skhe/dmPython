@@ -286,6 +286,69 @@ def test_connection_timeout_options_are_reported(conn_params):
             assert cur.fetchone() == (1,)
 
 
+def test_mpp_login_option_is_applied(conn_params):
+    with dmPython.connect(**conn_params, mpp_login=dmPython.DSQL_MPP_LOGIN_LOCAL) as conn:
+        assert conn.mpp_login == dmPython.DSQL_MPP_LOGIN_LOCAL
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            assert cur.fetchone() == (1,)
+
+
+def test_rwseparate_options_are_reported(conn_params):
+    assert dmPython.DSQL_RWSEPARATE_ON2 == 4
+    with dmPython.connect(
+        **conn_params,
+        rwseparate=dmPython.DSQL_RWSEPARATE_OFF,
+        rwseparate_percent=80,
+    ) as conn:
+        assert conn.rwseparate == dmPython.DSQL_RWSEPARATE_OFF
+        assert conn.rwseparate_percent == 80
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("ssl_path", "/nonexistent/dmpython-client-ssl"),
+        ("ssl_pwd", "test-only-password"),
+        ("ukey_name", "nonexistent-test-ukey"),
+        ("ukey_pin", "test-only-pin"),
+    ],
+)
+def test_security_options_do_not_silently_connect_without_support(conn_params, option, value):
+    with pytest.raises(dmPython.Error, match="not supported"):
+        dmPython.connect(**conn_params, **{option: value})
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("mpp_login", 2),
+        ("rwseparate", 2),
+        ("rwseparate_percent", -1),
+        ("rwseparate_percent", 101),
+    ],
+)
+def test_advanced_connection_options_reject_invalid_values(conn_params, option, value):
+    with pytest.raises((dmPython.Error, OverflowError)) as exc:
+        dmPython.connect(**conn_params, **{option: value})
+    if isinstance(exc.value, dmPython.Error):
+        assert option in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("mpp_login", dmPython.DSQL_MPP_LOGIN_LOCAL),
+        ("rwseparate", dmPython.DSQL_RWSEPARATE_ON),
+        ("rwseparate_percent", 80),
+    ],
+)
+def test_advanced_connection_options_reject_post_login_changes(conn_params, option, value):
+    with dmPython.connect(**conn_params) as conn:
+        with pytest.raises(dmPython.Error, match="before login"):
+            setattr(conn, option, value)
+
+
 def test_timeout_defaults_match_dm_interface(conn_params):
     with dmPython.connect(**conn_params) as conn:
         assert conn.login_timeout == 5000

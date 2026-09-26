@@ -22,6 +22,7 @@ dmPython 是达梦数据库（DM8）的原生 Python 驱动程序，遵循 [Pyth
 - **构建支持范围**：macOS 14+ ARM64、CPython 3.9–3.13。数据库行为仅以已有集成测试证据为准。
 - **Best-effort（尽力支持）**：尚未纳入 CI 覆盖的扩展使用场景。
 - **Not guaranteed（不保证）**：生产 SLA 承诺、厂商认证兼容性与闭源组件支持协议。
+- **连接安全**：Go 桥接层尚未实现 SSL 证书和 UKey 登录。非空的 `ssl_path`、`ssl_pwd`、`ukey_name`、`ukey_pin` 现在会报错；MPP 与读写分离参数已传递到底层驱动，集群路由效果仍需集群环境回归。
 
 ## 路线图与状态
 

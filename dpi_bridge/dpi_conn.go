@@ -61,6 +61,9 @@ type connHandle struct {
 	connTimeout   int
 	appName       string
 	svcPath       string
+	mppLogin      int
+	rwSeparate    int
+	rwPercent     int
 	txnIsolation  int
 	objectDescs   map[string]*objDescHandle
 	objectDescIDs map[string]uintptr
@@ -79,6 +82,9 @@ func newConnHandle(env *envHandle) *connHandle {
 		port:          DSQL_DEAFAULT_TCPIP_PORT,
 		autocommit:    false,
 		loginTimeout:  5000,
+		mppLogin:      -1,
+		rwSeparate:    -1,
+		rwPercent:     -1,
 		serverCode:    PG_UTF8,
 		objectDescs:   make(map[string]*objDescHandle),
 		objectDescIDs: make(map[string]uintptr),
@@ -191,11 +197,47 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		} else {
 			conn.svcPath = C.GoString((*C.char)(val))
 		}
-	case DSQL_ATTR_SSL_PATH, DSQL_ATTR_SSL_PWD,
-		DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN,
-		DSQL_ATTR_COMPRESS_MSG, DSQL_ATTR_USE_STMT_POOL,
-		DSQL_ATTR_MPP_LOGIN, DSQL_ATTR_RWSEPARATE,
-		DSQL_ATTR_RWSEPARATE_PERCENT, DSQL_ATTR_CURSOR_ROLLBACK_BEHAVIOR,
+	case DSQL_ATTR_MPP_LOGIN:
+		if conn.conn != nil {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "mpp_login can only be set before login"}
+			return DSQL_ERROR
+		}
+		if intVal != 0 && intVal != 1 {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "mpp_login must be GLOBAL (0) or LOCAL (1)"}
+			return DSQL_ERROR
+		}
+		conn.mppLogin = intVal
+	case DSQL_ATTR_RWSEPARATE:
+		if conn.conn != nil {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "rwseparate can only be set before login"}
+			return DSQL_ERROR
+		}
+		if intVal != 0 && intVal != 1 && intVal != 4 {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "rwseparate must be OFF (0), ON (1), or ON2 (4)"}
+			return DSQL_ERROR
+		}
+		conn.rwSeparate = intVal
+	case DSQL_ATTR_RWSEPARATE_PERCENT:
+		if conn.conn != nil {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "rwseparate_percent can only be set before login"}
+			return DSQL_ERROR
+		}
+		if intVal < 0 || intVal > 100 {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "rwseparate_percent must be between 0 and 100"}
+			return DSQL_ERROR
+		}
+		conn.rwPercent = intVal
+	case DSQL_ATTR_SSL_PATH, DSQL_ATTR_SSL_PWD, DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN:
+		if val != nil && C.GoString((*C.char)(val)) != "" {
+			name := map[int32]string{
+				DSQL_ATTR_SSL_PATH: "ssl_path", DSQL_ATTR_SSL_PWD: "ssl_pwd",
+				DSQL_ATTR_UKEY_NAME: "ukey_name", DSQL_ATTR_UKEY_PIN: "ukey_pin",
+			}[attr]
+			conn.lastErr = &diagInfo{errorCode: -1, message: name + " is not supported by this bridge"}
+			return DSQL_ERROR
+		}
+	case DSQL_ATTR_COMPRESS_MSG, DSQL_ATTR_USE_STMT_POOL,
+		DSQL_ATTR_CURSOR_ROLLBACK_BEHAVIOR,
 		DSQL_ATTR_OSAUTH_TYPE, DSQL_ATTR_DDL_AUTOCOMMIT,
 		DSQL_ATTR_COMPATIBLE_MODE, DSQL_ATTR_SHAKE_CRYPTO,
 		DSQL_ATTR_NLS_NUMERIC_CHARACTERS,
@@ -232,6 +274,33 @@ func dpi_get_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, bufLen C.sd
 		}
 	case DSQL_ATTR_SERVER_CODE:
 		*(*C.sdint4)(val) = C.sdint4(conn.serverCode)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_MPP_LOGIN:
+		value := conn.mppLogin
+		if value < 0 {
+			value = 0
+		}
+		*(*C.sdint4)(val) = C.sdint4(value)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_RWSEPARATE:
+		value := conn.rwSeparate
+		if value < 0 {
+			value = 0
+		}
+		*(*C.sdint4)(val) = C.sdint4(value)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_RWSEPARATE_PERCENT:
+		value := conn.rwPercent
+		if value < 0 {
+			value = 25
+		}
+		*(*C.sdint4)(val) = C.sdint4(value)
 		if valLen != nil {
 			*valLen = 4
 		}
@@ -381,6 +450,15 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	}
 	if conn.svcPath != "" {
 		params = append(params, "svcConfPath="+url.QueryEscape(filepath.Join(conn.svcPath, "dm_svc.conf")))
+	}
+	if conn.mppLogin >= 0 {
+		params = append(params, "mppLocal="+strconv.FormatBool(conn.mppLogin == 1))
+	}
+	if conn.rwSeparate >= 0 {
+		params = append(params, "rwSeparate="+strconv.Itoa(conn.rwSeparate))
+	}
+	if conn.rwPercent >= 0 {
+		params = append(params, "rwPercent="+strconv.Itoa(conn.rwPercent))
 	}
 	if len(params) > 0 {
 		dsn += "?" + strings.Join(params, "&")
