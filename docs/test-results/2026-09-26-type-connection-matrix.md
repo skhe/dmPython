@@ -1,0 +1,30 @@
+# 数据类型与连接选项行为矩阵（2026-09-26）
+
+## 本次验证
+
+在本机 OrbStack 的隔离达梦官方 ARM64 实例上，使用非管理员测试账号运行 `--require-dm -m requires_dm tests`。Python 3.9、3.10、3.11、3.12、3.13 均为 **104 passed、0 failed、0 errors、0 skipped**；每个版本另有 2 个非真实库用例不在本次选择中。结果由 JUnit 摘要的零跳过门槛复核。此前相同环境每版为 66 个真实库用例，本次新增 38 个 P1 用例。GitHub 托管的开发镜像需等本分支 CI 再次验证。
+
+| 范围 | 已验证行为 |
+| --- | --- |
+| 整数 | `SMALLINT` 下界、`INTEGER` 上界、`BIGINT` 上界往返 |
+| 数值 | `DECIMAL(18,6)`、`FLOAT`、`DOUBLE` 的有限值往返 |
+| 文本 | `VARCHAR`/`NVARCHAR` 中文和 emoji；`CHAR`/`NCHAR` 定长补空格 |
+| 二进制 | `BINARY` 补零、`VARBINARY` 包含 NUL 与非 ASCII 字节 |
+| 日期时间 | 闰日 `DATE`、`TIME` 时分秒、带微秒 `TIMESTAMP` 往返 |
+| 空值 | 整数、十进制、文本、二进制、日期、时间戳列的 `NULL` 往返 |
+| 连接地址 | `server`、`host`、`dsn=host:port` 均可连接；`host` 与 `server` 同时传入会报错 |
+| 连接行为 | 默认元组与 `DictCursor` 行形状、`schema`、`autoCommit` 开关及开启后无需显式提交的持久化、`txn_isolation` 读回 |
+| 选项基础检查 | 非数字 `port` 报错；`connection_timeout`、`login_timeout`、`compress_msg`、`use_stmt_pool` 可建连并执行查询 |
+
+`DECIMAL`、`FLOAT`、`DOUBLE`、`TIME`、`TIMESTAMP` 在当前默认读取路径通常返回字符串。矩阵断言数值或时间内容，同时保留未来改善 Python 返回类型的空间。
+
+## 已发现的问题
+
+1. **高精度十进制参数丢失小数**：向 `DECIMAL(30,8)` 绑定 `Decimal('12345678901234567890.12345678')` 或相同文本后，数据库中实际值为 `12345678901234567890.00000000`；直接在 SQL 中 `CAST` 同一字面量能保留小数。这是写入路径的准确性问题，当前 104 项通过不能代表高精度 `DECIMAL` 安全。修复后应把该值加入 CI 的往返断言。
+2. **连接选项的生效尚未验证**：`connection_timeout=5`、`login_timeout=5` 和 `app_name='dmpython_matrix'` 建连后，当前属性读回分别为 `0`、`0` 和空字符串。现有用例对前两项只验证“可建连”，不声称超时配置生效。需要单独设计可控的网络故障与服务器元数据检查。
+
+本次修复了 `datetime.time` 绑定在亚洲/上海本地时区下偏移五分钟的问题：桥接层曾以公元 0 年构造无时区的 `TIME`，触发历史时区偏移；改用现代锚定日期后，上述五版用例均验证 `23:59:58` 原样写入和读回。
+
+## 下一轮边界
+
+需要继续覆盖高精度/负数/指数形式十进制，带时区时间、区间、复杂对象与数组、BFILE、不同编码，以及 SSL、UKey、MPP、读写分离和超时/故障转移的实际效果。当前仅有一版官方 DM8 服务端和一版 GitHub CI 开发镜像的历史基线；不能据此推断跨达梦服务端版本兼容。
