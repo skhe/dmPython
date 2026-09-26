@@ -23,10 +23,12 @@ typedef dhandle         dhdesc;
 */
 import "C"
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 	"unsafe"
 
 	dm "gitee.com/chunanyong/dm"
@@ -422,10 +424,12 @@ func dpi_exec(hstmt C.dhstmt) C.DPIRETURN {
 
 	// Build args from parameter bindings
 	args := buildExecArgs(stmt)
+	ctx, cancel := statementContext(stmt)
+	defer cancel()
 
 	// Determine if this is a query or exec
 	if isQuery(stmt.sql) {
-		rows, dbErr := stmt.prepared.Query(args...)
+		rows, dbErr := stmt.prepared.QueryContext(ctx, args...)
 		if dbErr != nil {
 			stmt.lastErr = diagFromError(dbErr)
 			return DSQL_ERROR
@@ -438,7 +442,7 @@ func dpi_exec(hstmt C.dhstmt) C.DPIRETURN {
 			return DSQL_ERROR
 		}
 	} else {
-		result, dbErr := stmt.prepared.Exec(args...)
+		result, dbErr := stmt.prepared.ExecContext(ctx, args...)
 		if dbErr != nil {
 			stmt.lastErr = diagFromError(dbErr)
 			return DSQL_ERROR
@@ -483,9 +487,11 @@ func dpi_exec_direct(hstmt C.dhstmt, sqlTxt *C.sdbyte) C.DPIRETURN {
 
 	stmt.cachedRows = nil
 	stmt.fetchPos = 0
+	ctx, cancel := statementContext(stmt)
+	defer cancel()
 
 	if isQuery(sqlStr) {
-		rows, dbErr := stmt.conn.db.Query(sqlStr)
+		rows, dbErr := stmt.conn.db.QueryContext(ctx, sqlStr)
 		if dbErr != nil {
 			stmt.lastErr = diagFromError(dbErr)
 			return DSQL_ERROR
@@ -497,7 +503,7 @@ func dpi_exec_direct(hstmt C.dhstmt, sqlTxt *C.sdbyte) C.DPIRETURN {
 			return DSQL_ERROR
 		}
 	} else {
-		result, dbErr := stmt.conn.db.Exec(sqlStr)
+		result, dbErr := stmt.conn.db.ExecContext(ctx, sqlStr)
 		if dbErr != nil {
 			stmt.lastErr = diagFromError(dbErr)
 			return DSQL_ERROR
@@ -509,6 +515,16 @@ func dpi_exec_direct(hstmt C.dhstmt, sqlTxt *C.sdbyte) C.DPIRETURN {
 	}
 
 	return DSQL_SUCCESS
+}
+
+func statementContext(stmt *stmtHandle) (context.Context, context.CancelFunc) {
+	stmt.conn.mu.Lock()
+	timeout := stmt.conn.connTimeout
+	stmt.conn.mu.Unlock()
+	if timeout > 0 {
+		return context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	}
+	return context.WithCancel(context.Background())
 }
 
 //export dpi_exec_directW
@@ -627,6 +643,11 @@ func cacheAllRows(stmt *stmtHandle) error {
 			row[i] = *(scanDest[i].(*interface{}))
 		}
 		stmt.cachedRows = append(stmt.cachedRows, row)
+	}
+	if err := stmt.rows.Err(); err != nil {
+		stmt.rows.Close()
+		stmt.rows = nil
+		return err
 	}
 
 	// Close the rows now that we've cached everything
