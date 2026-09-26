@@ -22,6 +22,7 @@ typedef dhandle         dhstmt;
 typedef dhandle         dhdesc;
 typedef dhandle         dhloblctr;
 typedef dhandle         dhobj;
+typedef dhandle         dhbfile;
 
 typedef struct {
     sdint2  year;
@@ -403,7 +404,7 @@ func cTypeSize(cType int16) uintptr {
 		return 19 // DPI_MAX_NUMERIC_LEN(16) + precision + scale + sign
 	case DSQL_C_INTERVAL_DAY_TO_SECOND:
 		return unsafe.Sizeof(C.dpi_interval_dt_t{})
-	case DSQL_C_CLASS, DSQL_C_RECORD, DSQL_C_ARRAY, DSQL_C_SARRAY:
+	case DSQL_C_CLASS, DSQL_C_RECORD, DSQL_C_ARRAY, DSQL_C_SARRAY, DSQL_C_BFILE:
 		return unsafe.Sizeof(uintptr(0))
 	default:
 		return 0 // variable-length (string, binary, etc.)
@@ -597,6 +598,17 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16, objec
 		}
 		if bind.indPtr != nil {
 			*bind.indPtr = C.slength(unsafe.Sizeof(hobj))
+		}
+	case DSQL_C_BFILE:
+		hbfile := *(*C.dhbfile)(bind.dataPtr)
+		if hbfile == nil {
+			return fmt.Errorf("BFILE handle is unavailable")
+		}
+		if err := fillBfileHandle(val, unsafe.Pointer(hbfile)); err != nil {
+			return err
+		}
+		if bind.indPtr != nil {
+			*bind.indPtr = C.slength(unsafe.Sizeof(hbfile))
 		}
 	default:
 		// Default: treat as string
@@ -1247,6 +1259,13 @@ func extractBoundValue(bind bindParamInfo) interface{} {
 			return nil
 		}
 		return obj.driverValue()
+	case DSQL_C_BFILE:
+		hbfile := *(*C.dhbfile)(bind.dataPtr)
+		bf, ok := bfileFromHandle(hbfile)
+		if !ok {
+			return nil
+		}
+		return bf.dirName + ":" + bf.fileName
 	default:
 		// Treat as string
 		if bind.indPtr != nil && *bind.indPtr >= 0 {

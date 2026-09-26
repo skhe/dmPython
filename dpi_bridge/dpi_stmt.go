@@ -696,6 +696,8 @@ func mapGoTypeToDPI(ct *sql.ColumnType) (sqlType int16, precision uint64, scale 
 		return DSQL_VARCHAR, uint64(l), 0, int64(l)
 	case "BLOB":
 		return DSQL_BLOB, 0, 0, 0
+	case "BFILE":
+		return DSQL_BFILE, 512, 6, 512
 	case "CLOB", "TEXT":
 		return DSQL_CLOB, 0, 0, 0
 	case "DATE":

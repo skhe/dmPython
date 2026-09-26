@@ -28,6 +28,7 @@ typedef dhandle         dhbfile;
 import "C"
 import (
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"unsafe"
@@ -66,8 +67,10 @@ type objHandle struct {
 
 // bfileHandle represents a BFILE locator.
 type bfileHandle struct {
+	conn     *connHandle
 	dirName  string
 	fileName string
+	lastErr  *diagInfo
 }
 
 //export dpi_desc_obj
@@ -593,7 +596,11 @@ func dpi_alloc_bfile(hcon C.dhcon, pbfile *C.dhbfile) C.DPIRETURN {
 	if pbfile == nil {
 		return DSQL_ERROR
 	}
-	bf := &bfileHandle{}
+	conn, err := getConnHandle(hcon)
+	if err != nil {
+		return DSQL_INVALID_HANDLE
+	}
+	bf := &bfileHandle{conn: conn}
 	id := allocHandle(bf)
 	*pbfile = C.dhbfile(handleToPtr(id))
 	return DSQL_SUCCESS
@@ -608,11 +615,23 @@ func dpi_free_bfile(hbfile C.dhbfile) C.DPIRETURN {
 
 //export dpi_bfile_construct
 func dpi_bfile_construct(hbfile C.dhbfile, dirName *C.udbyte, fileName *C.udbyte) C.DPIRETURN {
+	bf, ok := bfileFromHandle(hbfile)
+	if !ok || dirName == nil || fileName == nil {
+		return DSQL_INVALID_HANDLE
+	}
+	bf.dirName = C.GoString((*C.char)(unsafe.Pointer(dirName)))
+	bf.fileName = C.GoString((*C.char)(unsafe.Pointer(fileName)))
 	return DSQL_SUCCESS
 }
 
 //export dpi_bfile_constructW
 func dpi_bfile_constructW(hbfile C.dhbfile, dirName *C.udbyte, dirNameLen C.udint4, fileName *C.udbyte, fileNameLen C.udint4) C.DPIRETURN {
+	bf, ok := bfileFromHandle(hbfile)
+	if !ok || dirName == nil || fileName == nil {
+		return DSQL_INVALID_HANDLE
+	}
+	bf.dirName = C.GoStringN((*C.char)(unsafe.Pointer(dirName)), C.int(dirNameLen))
+	bf.fileName = C.GoStringN((*C.char)(unsafe.Pointer(fileName)), C.int(fileNameLen))
 	return DSQL_SUCCESS
 }
 
@@ -620,11 +639,17 @@ func dpi_bfile_constructW(hbfile C.dhbfile, dirName *C.udbyte, dirNameLen C.udin
 func dpi_bfile_get_name(hbfile C.dhbfile,
 	dirBuf *C.udbyte, dirBufLen C.udint4, dirLen *C.udint4,
 	fileBuf *C.udbyte, fileBufLen C.udint4, fileLen *C.udint4) C.DPIRETURN {
+	bf, ok := bfileFromHandle(hbfile)
+	if !ok {
+		return DSQL_INVALID_HANDLE
+	}
+	dirSize := cStringLen((*C.sdbyte)(unsafe.Pointer(dirBuf)), int(dirBufLen), bf.dirName)
+	fileSize := cStringLen((*C.sdbyte)(unsafe.Pointer(fileBuf)), int(fileBufLen), bf.fileName)
 	if dirLen != nil {
-		*dirLen = 0
+		*dirLen = C.udint4(dirSize)
 	}
 	if fileLen != nil {
-		*fileLen = 0
+		*fileLen = C.udint4(fileSize)
 	}
 	return DSQL_SUCCESS
 }
@@ -642,7 +667,98 @@ func dpi_bfile_read(hbfile C.dhbfile, startPos C.udint8, ctype C.sdint2,
 	if dataGet != nil {
 		*dataGet = 0
 	}
-	return DSQL_NO_DATA
+	bf, ok := bfileFromHandle(hbfile)
+	if !ok {
+		return DSQL_INVALID_HANDLE
+	}
+	if ctype != C.sdint2(DSQL_C_BINARY) || startPos < 1 || (bufLen > 0 && valBuf == nil) {
+		bf.lastErr = &diagInfo{errorCode: -1, message: "invalid BFILE read arguments"}
+		return DSQL_ERROR
+	}
+	wanted := uint64(dataToRead)
+	if wanted > uint64(bufLen) {
+		wanted = uint64(bufLen)
+	}
+	var total uint64
+	for total < wanted {
+		chunkSize := wanted - total
+		if chunkSize > 16000 {
+			chunkSize = 16000
+		}
+		var encoded string
+		_, err := bf.conn.db.Exec(bfileReadSQL, bf.dirName, bf.fileName, sql.Out{Dest: &encoded}, chunkSize, uint64(startPos)+total)
+		if err != nil {
+			bf.lastErr = diagFromError(err)
+			return DSQL_ERROR
+		}
+		chunk, err := hex.DecodeString(encoded)
+		if err != nil {
+			bf.lastErr = diagFromError(err)
+			return DSQL_ERROR
+		}
+		if len(chunk) == 0 {
+			break
+		}
+		C.memcpy(unsafe.Add(unsafe.Pointer(valBuf), uintptr(total)), unsafe.Pointer(&chunk[0]), C.size_t(len(chunk)))
+		total += uint64(len(chunk))
+		if uint64(len(chunk)) < chunkSize {
+			break
+		}
+	}
+	if dataGet != nil {
+		*dataGet = C.udint8(total)
+	}
+	bf.lastErr = nil
+	return DSQL_SUCCESS
+}
+
+const bfileLengthSQL = "DECLARE F BFILE; BEGIN F := BFILENAME(?,?); DBMS_LOB.FILEOPEN(F); ? := DBMS_LOB.GETLENGTH(F); DBMS_LOB.FILECLOSE(F); END;"
+const bfileReadSQL = "DECLARE F BFILE; BEGIN F := BFILENAME(?,?); DBMS_LOB.FILEOPEN(F); ? := RAWTOHEX(DBMS_LOB.SUBSTR(F, ?, ?)); DBMS_LOB.FILECLOSE(F); END;"
+
+//export dpi_bfile_length
+func dpi_bfile_length(hbfile C.dhbfile, length *C.udint8) C.DPIRETURN {
+	bf, ok := bfileFromHandle(hbfile)
+	if !ok || length == nil {
+		return DSQL_INVALID_HANDLE
+	}
+	var size int64
+	_, err := bf.conn.db.Exec(bfileLengthSQL, bf.dirName, bf.fileName, sql.Out{Dest: &size})
+	if err != nil {
+		bf.lastErr = diagFromError(err)
+		return DSQL_ERROR
+	}
+	*length = C.udint8(size)
+	bf.lastErr = nil
+	return DSQL_SUCCESS
+}
+
+func bfileFromHandle(h C.dhbfile) (*bfileHandle, bool) {
+	value, ok := getHandle(ptrToHandle(unsafe.Pointer(h)))
+	bf, typed := value.(*bfileHandle)
+	return bf, ok && typed
+}
+
+func fillBfileHandle(value interface{}, handle unsafe.Pointer) error {
+	stored, ok := getHandle(ptrToHandle(handle))
+	bf, typed := stored.(*bfileHandle)
+	if !ok || !typed {
+		return fmt.Errorf("BFILE handle is invalid")
+	}
+	var name string
+	switch v := value.(type) {
+	case string:
+		name = v
+	case []byte:
+		name = string(v)
+	default:
+		return fmt.Errorf("unexpected BFILE value %T", value)
+	}
+	dir, file, found := strings.Cut(name, ":")
+	if !found || dir == "" || file == "" {
+		return fmt.Errorf("invalid BFILE locator %q", name)
+	}
+	bf.dirName, bf.fileName = dir, file
+	return nil
 }
 
 // ROWID operations
