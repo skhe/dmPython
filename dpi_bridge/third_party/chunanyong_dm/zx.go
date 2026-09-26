@@ -166,7 +166,8 @@ func (RWUtil rwUtil) chooseValidStandby(connection *DmConnection) (*ep, error) {
 	var err error
 	if connection.dmConnector.rwSeparate == RW_SEPARATE_USER_DEFINED {
 		return RWUtil.chooseStandbyUserDefined(connection), nil
-	} else if connection.dmConnector.rwSeparate == RW_SEPARATE_DB_APPLY_WAIT {
+	} else if connection.dmConnector.rwSeparate == RW_SEPARATE_DB_APPLY_WAIT &&
+		connection.StandbyHost != "" && connection.StandbyPort > 0 {
 		return newEP(connection.StandbyHost, connection.StandbyPort), nil
 	} else if connection.dmConnector.rwSeparate == RW_SEPARATE_EP_GROUP {
 		epStr := ""
@@ -200,8 +201,13 @@ func (RWUtil rwUtil) chooseValidStandby(connection *DmConnection) (*ep, error) {
 	}()
 
 	if err != nil {
-		rs.close()
-		stmt.close()
+		if rs != nil {
+			rs.close()
+		}
+		if stmt != nil {
+			stmt.close()
+		}
+		rs, stmt = nil, nil
 
 		if connection.Malini2 {
 			stmt, rs, err = connection.driverQuery(SQL_SELECT_STANDBY2 + filter)

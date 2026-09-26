@@ -146,6 +146,19 @@
   in two schemas and reads both a foreign object and an array of those objects
   from tables owned by the login user.
 
+## Patch: discover standby for apply-wait read/write separation
+
+- File: `zx.go`
+- Some DM8 servers do not include the standby host and port in the login
+  response for `rwSeparate=4`. Query the primary's valid standby metadata in
+  that case, as the other read/write separation modes do, instead of dialing
+  `:0`. The apply-wait mode remains enabled on the connection.
+- A failed metadata query may return no statement or rows. Close only handles
+  that exist before retrying the alternate metadata view.
+- Regression: `scripts/verify_dm_ha.py` checks modes 0, 1, and 4 against a
+  real primary/standby pair, then writes `DECIMAL(30,8)` through mode 4 and
+  verifies the replicated value on the standby.
+
 ## Patch: resolve service names with the bridge's default port
 
 - Files: `n.go`, `zzm.go`
