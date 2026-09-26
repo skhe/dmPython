@@ -530,9 +530,30 @@ TZVar_SetValue(
 
     if (PyDateTime_Check(value) || PyTime_Check(value))
     {
+        Py_ssize_t text_len;
         text = PyObject_Str(value);
         if (!text)
             return -1;
+
+        /* DM8 local time zone columns require a space before +/-HH:MM. */
+        text_len = PyUnicode_GetLength(text);
+        if (text_len >= 6 &&
+            (PyUnicode_ReadChar(text, text_len - 6) == '+' ||
+             PyUnicode_ReadChar(text, text_len - 6) == '-') &&
+            PyUnicode_ReadChar(text, text_len - 3) == ':')
+        {
+            PyObject* prefix = PyUnicode_Substring(text, 0, text_len - 6);
+            PyObject* offset = PyUnicode_Substring(text, text_len - 6, text_len);
+            PyObject* spaced = NULL;
+            if (prefix && offset)
+                spaced = PyUnicode_FromFormat("%U %U", prefix, offset);
+            Py_XDECREF(prefix);
+            Py_XDECREF(offset);
+            Py_DECREF(text);
+            if (!spaced)
+                return -1;
+            text = spaced;
+        }
     }
 
     if (dmBuffer_FromObject(&buffer, text, var->environment->encoding) < 0)

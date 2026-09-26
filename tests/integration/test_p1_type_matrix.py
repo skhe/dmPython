@@ -242,6 +242,35 @@ def test_timezone_time_roundtrip_preserves_instant(
 @pytest.mark.parametrize(
     "value",
     [
+        dt.datetime(2024, 2, 29, 23, 59, 58, 123456, tzinfo=_TZ_PLUS_0530),
+        dt.datetime(2024, 1, 1, 0, 0, 1, 1, tzinfo=_TZ_MINUS_1259),
+    ],
+    ids=["positive-offset", "negative-offset"],
+)
+def test_local_timezone_timestamp_accepts_aware_datetime(
+    conn, table_name_factory, drop_table, value
+):
+    table = table_name_factory("DMPY_LOCAL_TZ")
+    offset = value.strftime("%z")
+    spaced_text = f"{value:%Y-%m-%d %H:%M:%S.%f} {offset[:3]}:{offset[3:]}"
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (id INT, v TIMESTAMP WITH LOCAL TIME ZONE)")
+        cur.execute(f"INSERT INTO {table} VALUES (?, ?)", (1, value))
+        cur.execute(f"INSERT INTO {table} VALUES (?, ?)", (2, spaced_text))
+        conn.commit()
+        cur.execute(f"SELECT id, v FROM {table} ORDER BY id")
+        rows = cur.fetchall()
+        assert rows[0][1] == rows[1][1]
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
         dt.timedelta(days=1, hours=2, minutes=3, seconds=4, microseconds=123456),
         -dt.timedelta(seconds=1, microseconds=1),
         -dt.timedelta(days=100000, microseconds=1),

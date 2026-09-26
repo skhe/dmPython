@@ -56,4 +56,8 @@
 
 ## 后续修复：GB18030 大字段边界
 
-新增本机官方 ARM DM8 的 GB18030（`UNICODE=0`）隔离实例。修复前，包含中文和四字节 emoji 的 CLOB 跨越 16,000 字节写入边界时，文本读回虽完整，数据库的 `LENGTH(c)` 和 `DBMS_LOB.GETLENGTH(c)` 会少计 1 至 2 个字符。写入时现在让 GB18030 数据块结束在完整字符处。Python 3.10 在 UTF-8（`UNICODE=1`）和 GB18030 两套实例上的完整真实库回归各为 **166 passed、0 skipped**，另各有 2 个非真实库用例未选入。CI 增加 Python 3.9 至 3.13 × 两种编码的矩阵，并校验数据库实际 `UNICODE` 值；CI 结果待核实。
+新增本机官方 ARM DM8 的 GB18030（`UNICODE=0`）隔离实例。修复前，包含中文和四字节 emoji 的 CLOB 跨越 16,000 字节写入边界时，文本读回虽完整，数据库的 `LENGTH(c)` 和 `DBMS_LOB.GETLENGTH(c)` 会少计 1 至 2 个字符。写入时现在让 GB18030 数据块结束在完整字符处。Python 3.10 在 UTF-8（`UNICODE=1`）和 GB18030 两套实例上的完整真实库回归各为 **166 passed、0 skipped**，另各有 2 个非真实库用例未选入。CI 增加 Python 3.9 至 3.13 × 两种编码的矩阵，并校验数据库实际 `UNICODE` 值；PR #17 的 10 个真实数据库任务和 5 个 ARM64 构建任务均已通过。
+
+## 后续修复：本地时区时间戳绑定
+
+`TIMESTAMP WITH LOCAL TIME ZONE` 列原先拒绝带时区的 Python `datetime`，返回 6015 日期时间格式错误。原因是 Python 默认格式把 `+05:30` 等偏移量紧贴时间，而该列要求偏移量前有空格。现在只在绑定 Python 带时区时间对象时规范化格式；正负偏移量与跨日输入均通过。Python 3.10 在 UTF-8 和 GB18030 官方 ARM DM8 实例上的完整真实库回归各为 **168 passed、0 skipped**，另各有 2 个非真实库用例未选入。
