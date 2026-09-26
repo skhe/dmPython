@@ -104,6 +104,7 @@ const (
 	SslCertPathKey           = "sslCertPath"
 	SslKeyPathKey            = "sslKeyPath"
 	SslFilesPathKey          = "sslFilesPath"
+	SslKeyPasswordKey        = "sslKeyPassword"
 	KerberosLoginConfPathKey = "kerberosLoginConfPath"
 	UKeyNameKey              = "uKeyName"
 	UKeyPinKey               = "uKeyPin"
@@ -390,7 +391,8 @@ type DmConnector struct {
 
 	sslKeyPath string
 
-	sslFilesPath string
+	sslFilesPath   string
+	sslKeyPassword string
 
 	kerberosLoginConfPath string
 
@@ -596,6 +598,7 @@ func (c *DmConnector) setAttributes(props *Properties) error {
 	c.batchNotOnCall = props.GetBool(BatchNotOnCallKey, c.batchNotOnCall)
 	c.isBdtaRS = props.GetBool(IsBdtaRSKey, c.isBdtaRS)
 	c.sslFilesPath = props.GetTrimString(SslFilesPathKey, c.sslFilesPath)
+	c.sslKeyPassword = props.GetString(SslKeyPasswordKey, c.sslKeyPassword)
 	c.sslCertPath = props.GetTrimString(SslCertPathKey, c.sslCertPath)
 	if c.sslCertPath == "" && c.sslFilesPath != "" {
 		c.sslCertPath = filepath.Join(c.sslFilesPath, "client-cert.pem")
@@ -761,7 +764,8 @@ func (c *DmConnector) parseDSN(dsn string) (*Properties, string, string, error) 
 			if kv != nil && len(kv) > 1 {
 				value := kv[1]
 				if kv[0] == AppNameKey || kv[0] == "svcConfPath" ||
-					kv[0] == SslFilesPathKey || kv[0] == SslCertPathKey || kv[0] == SslKeyPathKey {
+					kv[0] == SslFilesPathKey || kv[0] == SslCertPathKey ||
+					kv[0] == SslKeyPathKey || kv[0] == SslKeyPasswordKey {
 					decoded, err := url.QueryUnescape(value)
 					if err != nil {
 						return nil, "", "", err
