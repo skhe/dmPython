@@ -469,6 +469,9 @@ func (G2DB g2db) fromString(val string, param parameter, conn *DmConnection) (in
 
 		return encodeByString(val, param.column, *conn)
 	case TIME_TZ:
+		if parsed, ok := parseTimeZoneString(val, false); ok {
+			return encodeByTime(parsed, param.column, *conn)
+		}
 		dt, err := parse(val, conn.FormatTimeTZ, int(conn.OracleDateLanguage))
 		if err != nil {
 			return nil, err
@@ -480,6 +483,9 @@ func (G2DB g2db) fromString(val string, param parameter, conn *DmConnection) (in
 
 		return encodeByString(val, param.column, *conn)
 	case DATETIME_TZ, DATETIME2_TZ:
+		if parsed, ok := parseTimeZoneString(val, true); ok {
+			return encodeByTime(parsed, param.column, *conn)
+		}
 		if conn.FormatTimestampTZ != "" {
 			dt, err := parse(val, conn.FormatTimestampTZ, int(conn.OracleDateLanguage))
 			if err != nil {

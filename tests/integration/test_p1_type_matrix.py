@@ -10,6 +10,11 @@ import pytest
 
 pytestmark = [pytest.mark.requires_dm, pytest.mark.p1_contract]
 
+_TZ_PLUS_0530 = dt.timezone(dt.timedelta(hours=5, minutes=30))
+_TZ_MINUS_0400 = dt.timezone(-dt.timedelta(hours=4))
+_AWARE_TIME = dt.time(12, 34, 56, 123456, tzinfo=_TZ_PLUS_0530)
+_AWARE_TIMESTAMP = dt.datetime(2024, 2, 29, 12, 34, 56, 123456, tzinfo=_TZ_PLUS_0530)
+
 
 @pytest.mark.parametrize(
     ("sql_type", "value", "expected"),
@@ -96,6 +101,65 @@ def test_high_precision_decimal_parameter_preserves_fraction(
         conn.commit()
         cur.execute(f"SELECT CAST(v AS VARCHAR(80)) FROM {table}")
         assert Decimal(cur.fetchone()[0]) == expected
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
+
+
+@pytest.mark.parametrize(
+    ("sql_type", "value", "expected", "parse"),
+    [
+        (
+            "TIME(6) WITH TIME ZONE",
+            _AWARE_TIME,
+            _AWARE_TIME,
+            dt.time.fromisoformat,
+        ),
+        (
+            "TIMESTAMP WITH TIME ZONE",
+            _AWARE_TIMESTAMP,
+            _AWARE_TIMESTAMP,
+            dt.datetime.fromisoformat,
+        ),
+        (
+            "TIME(6) WITH TIME ZONE",
+            "12:34:56.123456 -04:00",
+            dt.time(12, 34, 56, 123456, tzinfo=_TZ_MINUS_0400),
+            dt.time.fromisoformat,
+        ),
+        (
+            "TIMESTAMP WITH TIME ZONE",
+            "2024-02-29 12:34:56.123456 -04:00",
+            dt.datetime(2024, 2, 29, 12, 34, 56, 123456, tzinfo=_TZ_MINUS_0400),
+            dt.datetime.fromisoformat,
+        ),
+    ],
+    ids=["aware-time", "aware-timestamp", "text-time", "text-timestamp"],
+)
+def test_timezone_time_roundtrip_preserves_instant(
+    conn, table_name_factory, drop_table, sql_type, value, expected, parse
+):
+    table = table_name_factory("DMPY_TZ")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (v {sql_type})")
+        cur.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+        conn.commit()
+        cur.execute(f"SELECT v, CAST(v AS VARCHAR(80)) FROM {table}")
+        direct, cast = cur.fetchone()
+        for actual in (direct, cast):
+            normalized = str(actual).replace(" +", "+").replace(" -", "-")
+            parsed = parse(normalized)
+            if isinstance(expected, dt.time):
+                assert parsed.utcoffset() is not None
+                assert (
+                    dt.datetime.combine(dt.date(2024, 1, 1), parsed) - parsed.utcoffset()
+                ).time() == (
+                    dt.datetime.combine(dt.date(2024, 1, 1), expected) - expected.utcoffset()
+                ).time()
+            else:
+                assert parsed == expected
     finally:
         drop_table(cur, table)
         conn.commit()

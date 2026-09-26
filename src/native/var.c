@@ -648,10 +648,26 @@ dmVar_TypeByValue(
         return &vt_Date;
 
     if (PyDateTime_Check(value))
-        return &vt_Timestamp;
+    {
+        PyObject* offset = PyObject_CallMethod(value, "utcoffset", NULL);
+        int aware;
+        if (!offset)
+            return NULL;
+        aware = offset != Py_None;
+        Py_DECREF(offset);
+        return aware ? &vt_TimestampTZ : &vt_Timestamp;
+    }
 
     if (PyTime_Check(value))
-        return &vt_Time;
+    {
+        PyObject* offset = PyObject_CallMethod(value, "utcoffset", NULL);
+        int aware;
+        if (!offset)
+            return NULL;
+        aware = offset != Py_None;
+        Py_DECREF(offset);
+        return aware ? &vt_TimeTZ : &vt_Time;
+    }
 
     //��bigint�⣬����ȫӳ�䵽vt_Integer
     if (PyLong_Check(value))
@@ -1661,4 +1677,3 @@ dmVar_PutDataAftExec(
 
     return vLong_PutData((dm_LongVar*)var, arrayPos);
 }
-
