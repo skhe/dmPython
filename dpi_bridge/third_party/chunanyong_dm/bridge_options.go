@@ -7,3 +7,8 @@ func (dc *DmConnection) CompressionMode() int {
 	}
 	return dc.dmConnector.compress
 }
+
+// SSLMode reports the server-negotiated TLS mode (1 encrypts the session).
+func (dc *DmConnection) SSLMode() int {
+	return dc.sslEncrypt
+}
