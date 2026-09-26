@@ -284,3 +284,5 @@ dmPython.connect(
 - `NUMBER`, `DOUBLE`, `REAL`, `BOOLEAN`, `DECIMAL`
 - `TIME_WITH_TIMEZONE`, `TIMESTAMP_WITH_TIMEZONE`
 - `BIGINT`, `ROWID`
+
+查询 BFILE 列或 `BFILENAME()` 表达式会返回带 `size()` 和 `read(offset=1, amount=...)` 方法的对象。`read()` 返回原始字节；BFILE 指向数据库服务器上的只读文件，需要数据库目录对象及读取权限。当前真实库回归覆盖二进制文件、跨 16 KB 分块读取、偏移读取和 BFILE 列写入后的读取。

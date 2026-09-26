@@ -14,6 +14,8 @@ history:
 #include "Error.h"
 #include "var_pub.h"
 
+extern DPIRETURN dpi_bfile_length(dhbfile hbfile, udint8* length);
+
 static
 void 
 exBFileVar_Free(
@@ -118,83 +120,27 @@ PyTypeObject g_exBFileVarType = {
 //   Free an external BFile variable.
 //-----------------------------------------------------------------------------
 static
-void 
-exBFileVar_Free(
-    dm_ExternalBFile*     self    // variable to free
-)
+void
+exBFileVar_Free(dm_ExternalBFile* self)
 {
-    DPIRETURN           rt;
-    dhstmt              stmt = NULL;
-    dm_BFileVar*        var;
-    udint4              i;
+    dm_BFileVar* var = self->BFileVar;
+    udint4 i;
 
-    var                 = self->BFileVar;
-    var->pos            = self->pos;
-
-    if(self->BFileVar->connection != NULL && self->BFileVar->connection->isConnected == 1)
-    { 
-        //close bfile handle begin
-        rt = dpi_alloc_stmt(var->connection->hcon, &stmt);
-        if (Environment_CheckForError(var->environment, var->connection->hcon, DSQL_HANDLE_DBC, rt,
-            "exBFileVar_Free():dpi_alloc_stmt") < 0)
-        {
-            goto fun_end;
-        }
-
-        //use DBMS_LOB package function to close bfile handle
-        rt = dpi_prepare(stmt, "DBMS_LOB.FILECLOSE(?)");
-        if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-            "exBFileVar_Free():dpi_bfile_construct") < 0)
-        {
-            goto fun_end;
-        }
-
-        //bind parameter
-        rt = dpi_bind_param(stmt, 1, DSQL_PARAM_INPUT_OUTPUT, DSQL_C_BFILE, DSQL_BFILE, 512, 6, &((dhbfile*)var->data)[var->pos], sizeof(dhbfile), NULL);
-        if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-            "exBFileVar_Free():dpi_bfile_construct") < 0)
-        {
-            goto fun_end;
-        }
-
-        //dpi execute
-        rt = dpi_exec(stmt);
-        if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-            "exBFileVar_Free():dpi_bfile_construct") < 0)
-        {
-            goto fun_end;
-        }
-
-        //free statement handle
-        rt = dpi_free_stmt(stmt);
-        if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-            "exBFileVar_Free():dpi_free_stmt") < 0)
-        {
-            goto fun_end;
-        }
-    }
-    //close bfile handle end
-    if(var->data != NULL)
+    /* The bridge opens and closes the server file within each read. */
+    if (var != NULL && var->data != NULL)
     {
-        for (i = 0; i < var->allocatedElements; i++) 
+        for (i = 0; i < var->allocatedElements; i++)
         {
-            /** 通过exLob赋值的LOB句柄不预释放 **/
             if (((dhbfile*)var->data)[i] != NULL)
-            {            
                 dpi_free_bfile(((dhbfile*)var->data)[i]);
-            }
-            ((dhbfile*)var->data)[i]    = NULL;
+            ((dhbfile*)var->data)[i] = NULL;
         }
     }
 
-fun_end:
-
-    //clear references 
     Py_CLEAR(self->BFileVar);
     Py_TYPE(self)->tp_free((PyObject*) self);
 }
 
-//-----------------------------------------------------------------------------
 // exBFileVar_Verify()
 //   Verify that the external LOB var is still valid.
 //-----------------------------------------------------------------------------
@@ -267,154 +213,64 @@ exBFileVar_Size(
 //   Return the size of the BFILE variable for internal comsumption.
 //-----------------------------------------------------------------------------
 static 
-int 
-exBFileVar_InternalSize(
-    dm_ExternalBFile*     self // variable to return the size of
-)
+int
+exBFileVar_InternalSize(dm_ExternalBFile* self)
 {
-    dm_BFileVar*        var;
-    DPIRETURN           rt;
-    dhstmt              stmt = NULL;
-    slength             length = 0;
+    dm_BFileVar* var = self->BFileVar;
+    udint8 length = 0;
+    DPIRETURN rt;
 
-    var         = self->BFileVar;
-    var->pos    = self->pos;
+    var->pos = self->pos;
+    rt = dpi_bfile_length(((dhbfile*)var->data)[var->pos], &length);
+    if (Environment_CheckForError(var->environment,
+            ((dhbfile*)var->data)[var->pos], DSQL_HANDLE_BFILE, rt,
+            "exBFileVar_InternalSize():dpi_bfile_length") < 0)
+        return -1;
 
-    rt = dpi_alloc_stmt(var->connection->hcon, &stmt);
-    if (Environment_CheckForError(var->environment, var->connection->hcon, DSQL_HANDLE_DBC, rt,
-        "exBFileVar_InternalSize():dpi_alloc_stmt") < 0)
+    if (length > 2147483647ULL)
     {
+        PyErr_SetString(PyExc_OverflowError, "BFILE is too large for size()");
         return -1;
     }
-
-    rt = dpi_prepare(stmt, "SELECT DBMS_LOB.GETLENGTH(?)");
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_InternalSize():dpi_prepare") < 0)
-    {
-        return -1;
-    }
-
-    rt = dpi_bind_param(stmt, 1, DSQL_PARAM_INPUT, DSQL_C_BFILE, DSQL_BFILE, 512, 6, &((dhbfile*)var->data)[var->pos], sizeof(dhbfile), NULL);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_InternalSize():dpi_bind_param") < 0)
-    {
-        return -1;
-    }
-
-    rt = dpi_exec(stmt);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_InternalSize():dpi_exec") < 0)
-    {
-        return -1;
-    }
-
-    rt = dpi_fetch(stmt, NULL);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_InternalSize():dpi_fetch") < 0)
-    {
-        return -1;
-    }
-
-    rt = dpi_get_data(stmt, 1, DSQL_C_ULONG, &length, sizeof(slength), NULL);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_InternalSize():dpi_get_data") < 0)
-    {
-        return -1;
-    }
-
-    rt = dpi_free_stmt(stmt);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_InternalSize():dpi_free_stmt") < 0)
-    {
-        return -1;
-    }
-
-    return length;
+    return (int)length;
 }
 
-//-----------------------------------------------------------------------------
 // exLobVar_Value()
 //   Return a portion (or all) of the data in the external LOB variable.
 //-----------------------------------------------------------------------------
-static 
+static
 PyObject*
-exBFileVar_Value(
-    dm_ExternalBFile*   self,            // variable to return the size of
-    int                 offset,         // offset into LOB
-    slength             amount          // amount to read from LOB(IN/OUT)
-)
+exBFileVar_Value(dm_ExternalBFile* self, int offset, slength amount)
 {
-    dm_BFileVar*        var;
-    DPIRETURN           rt;
-    slength             bufferSize;
-    PyObject*           result = NULL;
-    sdbyte*             buffer;
-    udint8              data_get = 0;
-    dhstmt              stmt = NULL;
+    dm_BFileVar* var = self->BFileVar;
+    DPIRETURN rt;
+    sdbyte* buffer;
+    udint8 data_get = 0;
+    PyObject* result;
 
-    var                 = self->BFileVar;
-    var->pos            = self->pos;
+    var->pos = self->pos;
+    if (amount <= 0)
+        return PyBytes_FromStringAndSize("", 0);
 
-    rt = dpi_alloc_stmt(var->connection->hcon, &stmt);
-    if (Environment_CheckForError(var->environment, var->connection->hcon, DSQL_HANDLE_DBC, rt,
-        "exBFileVar_Read():dpi_alloc_stmt") < 0)
-    {
-        return NULL;
-    }
-
-    rt = dpi_prepare(stmt, "DBMS_LOB.FILEOPEN(?)");
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_Read():dpi_bfile_construct") < 0)
-    {
-        return NULL;
-    }
-
-    rt = dpi_bind_param(stmt, 1, DSQL_PARAM_INPUT_OUTPUT, DSQL_C_BFILE, DSQL_BFILE, 512, 6, &((dhbfile*)var->data)[var->pos], sizeof(dhbfile), NULL);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_Read():dpi_bfile_construct") < 0)
-    {
-        return NULL;
-    }
-
-    rt = dpi_exec(stmt);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_Read():dpi_bfile_construct") < 0)
-    {
-        return NULL;
-    }
-
-    bufferSize  = amount;
-
-    // create a string for retrieving the value
-    buffer = (sdbyte*) PyMem_Malloc(bufferSize + 1);
-    if (!buffer)
+    buffer = (sdbyte*)PyMem_Malloc((size_t)amount);
+    if (buffer == NULL)
         return PyErr_NoMemory();
 
-    memset(buffer, 0, bufferSize + 1);
-
-    rt = dpi_bfile_read(((dhbfile*)var->data)[var->pos], offset, DSQL_C_BINARY, amount, buffer, bufferSize, &data_get);
-    if (Environment_CheckForError(var->environment, ((dhbfile*)var->data)[var->pos], DSQL_HANDLE_BFILE, rt,
-        "exBFileVar_Read():dpi_bfile_read") < 0)
+    rt = dpi_bfile_read(((dhbfile*)var->data)[var->pos], offset,
+            DSQL_C_BINARY, amount, buffer, amount, &data_get);
+    if (Environment_CheckForError(var->environment,
+            ((dhbfile*)var->data)[var->pos], DSQL_HANDLE_BFILE, rt,
+            "exBFileVar_Value():dpi_bfile_read") < 0)
     {
-        goto fun_end;
+        PyMem_Free(buffer);
+        return NULL;
     }
 
-    result = PyBytes_FromStringAndSize(buffer, data_get);
-
-fun_end:
+    result = PyBytes_FromStringAndSize((char*)buffer, (Py_ssize_t)data_get);
     PyMem_Free(buffer);
-
-    rt = dpi_free_stmt(stmt);
-    if (Environment_CheckForError(var->environment, stmt, DSQL_HANDLE_STMT, rt,
-        "exBFileVar_Read():dpi_free_stmt") < 0)
-    {
-        return 0;
-    }
-
     return result;
 }
 
-//-----------------------------------------------------------------------------
 // exBFileVar_Read()
 //   Return a portion (or all) of the data in the BFILE variable.
 //-----------------------------------------------------------------------------
@@ -444,6 +300,9 @@ exBFileVar_Read(
         offset = 1;
     }
 
+    if (exBFileVar_Verify(self) < 0)
+        return NULL;
+
     if (amount < 0)
     {
         amount = exBFileVar_InternalSize(self);
@@ -459,9 +318,6 @@ exBFileVar_Read(
         }
     }
     
-    if (exBFileVar_Verify(self) < 0)
-        return NULL;
-
     return exBFileVar_Value(self, offset, amount);
 }
 

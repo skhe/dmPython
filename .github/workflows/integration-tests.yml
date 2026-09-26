@@ -47,6 +47,7 @@ jobs:
             echo 'DM_TEST_USER=DMPYTEST'
             echo 'DM_TEST_HOST=127.0.0.1'
             echo 'DM_TEST_PORT=15236'
+            echo 'DM_BFILE_TEST_CONTAINER=dmpython-ci-dm8'
           } >> "$GITHUB_ENV"
           docker run -d --user root --name dmpython-ci-dm8 \
             -e SYSDBA_PWD="$admin_password" \
