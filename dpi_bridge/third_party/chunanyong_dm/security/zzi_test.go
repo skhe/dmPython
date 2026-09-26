@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/youmark/pkcs8"
 )
 
 func testCertificate(t *testing.T, template, parent *x509.Certificate, signer *ecdsa.PrivateKey) ([]byte, *ecdsa.PrivateKey) {
@@ -159,6 +161,37 @@ func TestEncryptedClientKey(t *testing.T) {
 	for _, wrong := range []string{"", "wrong-password"} {
 		if err := testTLSHandshake(t, dir, serverCert, "localhost", wrong); err == nil {
 			t.Fatalf("ssl_pwd %q should fail", wrong)
+		}
+	}
+}
+
+func TestEncryptedPKCS8ClientKey(t *testing.T) {
+	dir, serverCert := testTLSFiles(t)
+	keyPath := filepath.Join(dir, "client-key.pem")
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(keyPEM)
+	if block == nil {
+		t.Fatal("missing private key")
+	}
+	privateKey, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	password := "test+pkcs8&pwd 123"
+	encrypted, err := pkcs8.MarshalPrivateKey(privateKey, []byte(password), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, keyPath, pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: encrypted}))
+	if err := testTLSHandshake(t, dir, serverCert, "localhost", password); err != nil {
+		t.Fatalf("correct PKCS#8 ssl_pwd: %v", err)
+	}
+	for _, wrong := range []string{"", "wrong-password"} {
+		if err := testTLSHandshake(t, dir, serverCert, "localhost", wrong); err == nil {
+			t.Fatalf("PKCS#8 ssl_pwd %q should fail", wrong)
 		}
 	}
 }

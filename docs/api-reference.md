@@ -62,7 +62,7 @@ dmPython.connect(
 - IPv6 地址使用方括号，例如 `server="[::1]"`；`dsn` 可写为 `"[::1]:5236"`。
 - `dmsvc_path` 指向包含 `dm_svc.conf` 的目录；连接时可把 `server` 设为配置文件中的服务名。双端点服务名配置 `LOGIN_MODE=1` 后，已在本机 DM8 主备环境验证故障自动接管后的**新连接**会选择晋升的新主库；已有连接的自动恢复尚未验证。
 - `mpp_login` 接受 `DSQL_MPP_LOGIN_GLOBAL` 或 `DSQL_MPP_LOGIN_LOCAL`；`rwseparate` 接受 `DSQL_RWSEPARATE_OFF`、`DSQL_RWSEPARATE_ON` 或 `DSQL_RWSEPARATE_ON2`，`rwseparate_percent` 范围为 0–100。这些选项在建连时传给底层驱动。读写分离模式 1 和 4 已在本机 DM8 主备环境中验证自动提交模式下的查询路由；MPP 全局和本地登录已在本机两节点集群验证分布式读写。
-- `ssl_path` 指向含 `ca-cert.pem`、`client-cert.pem`、`client-key.pem` 的目录。服务端证书没有 SAN 时还需提供准确的 `server-cert.pem`，用于证书固定校验；有 SAN 的证书按 CA 链和主机名校验。设置后若服务端未协商加密，连接失败。`ssl_pwd` 可解密传统 PEM 格式的加密客户端私钥，必须与 `ssl_path` 一起使用；加密 PKCS#8 私钥尚不支持。非空的 `ukey_name`、`ukey_pin` 暂不支持。
+- `ssl_path` 指向含 `ca-cert.pem`、`client-cert.pem`、`client-key.pem` 的目录。服务端证书没有 SAN 时还需提供准确的 `server-cert.pem`，用于证书固定校验；有 SAN 的证书按 CA 链和主机名校验。设置后若服务端未协商加密，连接失败。`ssl_pwd` 可解密传统 PEM 或 PBES2 加密的 PKCS#8 客户端私钥，必须与 `ssl_path` 一起使用。非空的 `ukey_name`、`ukey_pin` 暂不支持。
 - `user` 支持 `user/password@server:port[/schema][?catalog=...]` 形式。
 - `login_timeout` 以毫秒为单位，默认 5000，限制首次建连握手；设为 0 表示不限制。`connection_timeout` 以秒为单位，默认 0 不限制，限制 SQL 执行时间。
 - 常量参数建议使用模块常量（如 `DSQL_AUTOCOMMIT_ON`、`ISO_LEVEL_READ_COMMITTED`）。

@@ -64,15 +64,17 @@
 - Regression: `tests/ssl/test_ssl_connection.py` uses a real SSL-enabled DM8
   instance, including wrong and missing pins.
 
-## Patch: encrypted traditional PEM client keys
+## Patch: encrypted traditional PEM and PKCS#8 client keys
 
 - Files: `a.go`, `n.go`, `security/zzi.go`
 - Pass `ssl_pwd` through the DPI bridge and connector, preserving special
   characters in the password. Decrypt traditional encrypted PEM private keys
   before the TLS handshake; reject a missing or wrong password and identify
-  encrypted PKCS#8 keys as unsupported.
-- Regression: `security/zzi_test.go` checks local TLS handshakes; the real DM8
-  `tests/ssl/test_ssl_connection.py` case uses an encrypted RSA client key.
+  encrypted PKCS#8 keys with the pinned MIT-licensed `github.com/youmark/pkcs8`
+  library. Reject missing or wrong passwords for both formats.
+- Regression: `security/zzi_test.go` checks local TLS handshakes with encrypted
+  EC keys; real DM8 `tests/ssl/test_ssl_connection.py` cases use an RSA client
+  key encrypted in both formats, including an OpenSSL-generated PKCS#8 key.
 
 ## Patch: initial connection timeout through endpoint groups
 

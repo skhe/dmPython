@@ -105,3 +105,33 @@ def test_encrypted_client_key_password(ssl_params, tmp_path):
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
             assert cur.fetchone() == (1,)
+
+
+def test_encrypted_pkcs8_client_key_password(ssl_params, tmp_path):
+    cert_dir = tmp_path / "encrypted-pkcs8-client-key"
+    shutil.copytree(ssl_params["ssl_path"], cert_dir)
+    key_path = cert_dir / "client-key.pem"
+    encrypted_path = cert_dir / "encrypted-key.pem"
+    password = "test+pkcs8&pwd 123"
+    subprocess.run(
+        [
+            "openssl", "pkcs8", "-topk8", "-v2", "aes-256-cbc", "-iter", "10000",
+            "-in", str(key_path), "-out", str(encrypted_path),
+            "-passout", "env:DM_SSL_KEY_PWD",
+        ],
+        env={**os.environ, "DM_SSL_KEY_PWD": password},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    encrypted_path.replace(key_path)
+
+    options = {**ssl_params, "ssl_path": str(cert_dir)}
+    with pytest.raises(dmPython.Error, match="requires ssl_pwd"):
+        dmPython.connect(**options)
+    with pytest.raises(dmPython.Error, match="decrypt PKCS#8 SSL private key"):
+        dmPython.connect(**options, ssl_pwd="wrong-password")
+    with dmPython.connect(**options, ssl_pwd=password) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            assert cur.fetchone() == (1,)

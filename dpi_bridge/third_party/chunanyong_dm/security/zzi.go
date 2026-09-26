@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/youmark/pkcs8"
 )
 
 // var dmHome = flag.String("DM_HOME", "", "Where DMDB installed")
@@ -98,7 +100,33 @@ func loadClientKeyPair(certPath, keyPath, password string) (tls.Certificate, err
 		return tls.Certificate{}, errors.New("SSL private key is not PEM encoded")
 	}
 	if block.Type == "ENCRYPTED PRIVATE KEY" {
-		return tls.Certificate{}, errors.New("encrypted PKCS#8 SSL private keys are not supported")
+		if password == "" {
+			return tls.Certificate{}, errors.New("encrypted SSL private key requires ssl_pwd")
+		}
+		privateKey, err := pkcs8.ParsePKCS8PrivateKey(block.Bytes, []byte(password))
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("failed to decrypt PKCS#8 SSL private key: %w", err)
+		}
+		der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+		if err != nil {
+			return tls.Certificate{}, err
+		}
+		defer func() {
+			for i := range der {
+				der[i] = 0
+			}
+		}()
+		certPEM, err := os.ReadFile(certPath)
+		if err != nil {
+			return tls.Certificate{}, err
+		}
+		plainKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+		defer func() {
+			for i := range plainKeyPEM {
+				plainKeyPEM[i] = 0
+			}
+		}()
+		return tls.X509KeyPair(certPEM, plainKeyPEM)
 	}
 	if !x509.IsEncryptedPEMBlock(block) {
 		return tls.LoadX509KeyPair(certPath, keyPath)

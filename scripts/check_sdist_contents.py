@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 REQUIRED = {
+    "THIRD_PARTY_NOTICES.md",
     "dpi_bridge/go.mod",
     "dpi_bridge/go.sum",
     "dpi_bridge/third_party/chunanyong_dm/go.mod",

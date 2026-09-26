@@ -31,6 +31,10 @@ instance.
 The ARM macOS Python 3.10 extension also connected to the SSL-enabled DM8
 instance with the bundled RSA client key re-encrypted in traditional PEM
 format. `ssl_pwd="test+ssl&pwd 123"` succeeded and executed a query; a missing
-or wrong password failed. All five SSL tests passed locally. The password
-without `ssl_path` was rejected on the ordinary DM8 instance. Encrypted
-PKCS#8 keys and UKey login remain unsupported.
+or wrong password failed. An OpenSSL-generated PBES2/AES-256-CBC PKCS#8 RSA
+client key also connected and queried with `ssl_pwd="test+pkcs8&pwd 123"`;
+missing and wrong passwords failed. All six SSL tests passed against the local
+ARM DM8 instance. The password without `ssl_path` was rejected on the ordinary
+DM8 instance. Because the PKCS#8 dependency updates `golang.org/x/text`, the
+type matrix and Unicode CLOB regressions were rerun against local UTF8 and
+GB18030 DM8 instances: 68 passed on each. UKey login remains unsupported.
