@@ -1,4 +1,4 @@
-include LICENSE README.md setup.py pyproject.toml docs/README_zh.md
+include LICENSE THIRD_PARTY_NOTICES.md README.md setup.py pyproject.toml docs/README_zh.md
 recursive-include src/native *.c *.h
 recursive-include dpi_bridge *.go
 recursive-include dpi_bridge *.mod *.sum

@@ -173,6 +173,7 @@ setup(
     cmdclass={"build_ext": build_ext},
     keywords="Dameng DM8 database DB-API",
     license="MulanPSL-2.0",
+    license_files=["LICENSE", "THIRD_PARTY_NOTICES.md"],
     python_requires=">=3.9,<3.14",
     classifiers=[
         "Development Status :: 4 - Beta",
