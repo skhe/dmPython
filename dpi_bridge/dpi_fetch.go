@@ -515,7 +515,13 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16) {
 
 	switch cType {
 	case DSQL_C_NCHAR, DSQL_C_CHAR, DSQL_C_WCHAR:
-		writeStringValue(val, bind)
+		if t, ok := val.(time.Time); ok && sqlType == DSQL_TIME_TZ {
+			writeStringValue(t.Format("15:04:05.000000 -07:00"), bind)
+		} else if t, ok := val.(time.Time); ok && sqlType == DSQL_TIMESTAMP_TZ {
+			writeStringValue(t.Format("2006-01-02 15:04:05.000000 -07:00"), bind)
+		} else {
+			writeStringValue(val, bind)
+		}
 	case DSQL_C_SLONG:
 		writeInt32Value(val, bind)
 	case DSQL_C_ULONG:

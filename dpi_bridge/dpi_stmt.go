@@ -672,9 +672,11 @@ func mapGoTypeToDPI(ct *sql.ColumnType) (sqlType int16, precision uint64, scale 
 		return DSQL_DATE, 10, 0, 10
 	case "TIME":
 		return DSQL_TIME, 8, 0, 8
+	case "TIME WITH TIME ZONE":
+		return DSQL_TIME_TZ, 20, 6, 20
 	case "TIMESTAMP", "DATETIME":
 		return DSQL_TIMESTAMP, 26, 6, 26
-	case "TIMESTAMP WITH TIME ZONE":
+	case "TIMESTAMP WITH TIME ZONE", "DATETIME WITH TIME ZONE":
 		return DSQL_TIMESTAMP_TZ, 34, 6, 34
 	case "BIT", "BOOL", "BOOLEAN":
 		return DSQL_BIT, 1, 0, 1

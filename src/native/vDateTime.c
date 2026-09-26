@@ -244,13 +244,13 @@ dm_VarType vt_TimestampTZ = {
     (PreDefineProc) NULL,
     (PreFetchProc) NULL,
     (IsNullProc) NULL,
-    (SetValueProc)TimestampVar_SetValue,
-    (GetValueProc)TimestampVar_GetValue,
+    (SetValueProc)TZVar_SetValue,
+    (GetValueProc)TZVar_GetValue,
     (GetBufferSizeProc) NULL,
-    (BindObjectValueProc)TimestampVar_BindObjectValue,
+    (BindObjectValueProc)TZVar_BindObjectValue,
     &g_TimestampTZType,                 // Python type
-    DSQL_C_TIMESTAMP,                   // C type
-    sizeof(dpi_timestamp_t),            // element length (default)
+    DSQL_C_NCHAR,                      // C type
+    64,                                 // element length (default)
     0,                                  // is character data
     0,                                  // is variable length
     1,                                  // can be copied
@@ -525,23 +525,37 @@ TZVar_SetValue(
     PyObject*           value           // value to set
 )
 {
-    dm_Buffer           buffer;
+    dm_Buffer buffer;
+    PyObject* text = value;
 
-    // populate the buffer and confirm the maximum size is not exceeded
-    if (dmBuffer_FromObject(&buffer, value, var->environment->encoding) < 0)
-        return -1;
-
-    if (buffer.size)
+    if (PyDateTime_Check(value) || PyTime_Check(value))
     {
-        memcpy(var->data + var->bufferSize * pos, buffer.ptr, buffer.size);
+        text = PyObject_Str(value);
+        if (!text)
+            return -1;
     }
 
-    // keep a copy of the string
-    var->indicator[pos]     = buffer.size;
-    var->actualLength[pos]  = buffer.size;
+    if (dmBuffer_FromObject(&buffer, text, var->environment->encoding) < 0)
+    {
+        if (text != value)
+            Py_DECREF(text);
+        return -1;
+    }
+    if (text != value)
+        Py_DECREF(text);
 
+    if (buffer.size > var->bufferSize)
+    {
+        dmBuffer_Clear(&buffer);
+        PyErr_SetString(PyExc_ValueError, "time zone value exceeds the binding buffer");
+        return -1;
+    }
+    if (buffer.size)
+        memcpy(var->data + var->bufferSize * pos, buffer.ptr, buffer.size);
+
+    var->indicator[pos] = buffer.size;
+    var->actualLength[pos] = buffer.size;
     dmBuffer_Clear(&buffer);
-
     return 0;
 }
 

@@ -20,6 +20,33 @@ func encodeByString(x string, column column, conn DmConnection) ([]byte, error) 
 	return encode(dt, column, int(conn.dmConnector.localTimezone), int(conn.DbTimezone))
 }
 
+func parseTimeZoneString(value string, timestamp bool) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	base := "15:04:05"
+	if timestamp {
+		base = "2006-01-02 15:04:05"
+		if len(value) > 10 && value[10] == 'T' {
+			value = value[:10] + " " + value[11:]
+		}
+	}
+	for _, layout := range []string{
+		base + ".999999999Z07:00",
+		base + ".999999999 Z07:00",
+		base + "Z07:00",
+		base + " Z07:00",
+	} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			if !timestamp {
+				parsed = time.Date(2000, 1, 1, parsed.Hour(), parsed.Minute(),
+					parsed.Second(), parsed.Nanosecond(), parsed.Location())
+			}
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
+}
+
 func encodeByTime(x time.Time, column column, conn DmConnection) ([]byte, error) {
 	dt := toDTFromTime(x)
 	return encode(dt, column, int(conn.dmConnector.localTimezone), int(conn.DbTimezone))
