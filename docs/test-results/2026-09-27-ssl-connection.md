@@ -14,12 +14,19 @@
   cases; 184 passed, 4 skipped, 6 deselected there. GitHub CI supplies the
   required credential for both database encodings.
 
-## Remaining scope
+## Modern server certificate
 
-The local test uses DM8's bundled legacy certificate without SAN, so it
-exercises exact certificate pinning. CA and hostname verification for modern
-SAN certificates is implemented but needs a server with a modern certificate
-for an end-to-end regression.
+An isolated ARM DM8 instance used a short-lived test CA, a server certificate
+with `127.0.0.1` in its IP SAN, and a matching SYSDBA client certificate.
+Without a `server-cert.pem` pin in the client directory, the ARM macOS Python
+3.10 extension connected and queried successfully. Connecting as `localhost`
+was rejected by hostname verification, and replacing the trusted CA with an
+unrelated CA was rejected as an unknown authority. All three real-database
+checks in `tests/ssl_modern` passed locally. The GitHub ARM SSL job now runs
+the same checks after replacing the bundled certificates in its isolated
+instance.
+
+## Remaining scope
 
 The ARM macOS Python 3.10 extension also connected to the SSL-enabled DM8
 instance with the bundled RSA client key re-encrypted in traditional PEM
