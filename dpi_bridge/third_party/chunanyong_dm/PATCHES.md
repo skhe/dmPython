@@ -62,6 +62,16 @@
 - Regression: `test_connection_timeout_options_are_reported` connects with an
   application name containing `&` and `+`.
 
+## Patch: validate user-defined object members before encoding
+
+- File: `zzo.go`
+- Problem: a nested object with the wrong member representation or count could
+  trigger a Go type assertion panic or an index-out-of-range panic.
+- Fix: check the member count and type before encoding, and return a driver
+  error for invalid values. Accept pointer forms of nested objects as well.
+- Regression: `tests/integration/test_p1_object_types.py` covers nested object
+  writes and reads against a real database.
+
 ## Rollback
 
 - Remove `replace gitee.com/chunanyong/dm => ./third_party/chunanyong_dm` in `dpi_bridge/go.mod`.

@@ -278,6 +278,10 @@ ObjectVar_GetParamDescAndObjHandles(
         ObjectVar_GetParamDescHandle(self, hdesc_param, pos, &self->desc) < 0)
         return -1;
 
+    /* Input parameters can carry their descriptor in the OBJECT value. */
+    if (self->desc == NULL)
+        return 0;
+
     for (i = 0; i < self->allocatedElements; i ++)
     {
         if (self->data[i] != NULL)
@@ -429,6 +433,15 @@ ObjectVar_SetValue(
     }
 
     exObjVar                = (dm_ExternalObjectVar*)Value;    
+
+    /* Input object variables already own a valid descriptor and value handle. */
+    if (var->desc == NULL || var->data[pos] == NULL)
+    {
+        var->desc = exObjVar->hobjdesc;
+        var->data[pos] = exObjVar->hobj;
+        var->indicator[pos] = sizeof(dhobj);
+        var->actualLength[pos] = sizeof(dhobj);
+    }
 
     if (ExObjVar_MatchCheck(exObjVar, var->desc, var->data[pos], NULL) < 0)
         return -1;

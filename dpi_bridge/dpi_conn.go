@@ -50,16 +50,18 @@ type connHandle struct {
 	tx   driver.Tx        // active transaction (nil if none)
 
 	// Connection parameters (set before login)
-	host         string
-	port         int
-	user         string
-	password     string
-	schema       string
-	autocommit   bool
-	loginTimeout int
-	connTimeout  int
-	appName      string
-	txnIsolation int
+	host          string
+	port          int
+	user          string
+	password      string
+	schema        string
+	autocommit    bool
+	loginTimeout  int
+	connTimeout   int
+	appName       string
+	txnIsolation  int
+	objectDescs   map[string]*objDescHandle
+	objectDescIDs map[string]uintptr
 
 	// Post-login info
 	serverVersion string
@@ -71,11 +73,13 @@ type connHandle struct {
 
 func newConnHandle(env *envHandle) *connHandle {
 	return &connHandle{
-		env:          env,
-		port:         DSQL_DEAFAULT_TCPIP_PORT,
-		autocommit:   false,
-		loginTimeout: 5000,
-		serverCode:   PG_UTF8,
+		env:           env,
+		port:          DSQL_DEAFAULT_TCPIP_PORT,
+		autocommit:    false,
+		loginTimeout:  5000,
+		serverCode:    PG_UTF8,
+		objectDescs:   make(map[string]*objDescHandle),
+		objectDescIDs: make(map[string]uintptr),
 	}
 }
 
@@ -105,6 +109,9 @@ func dpi_free_con(hcon C.dhcon) C.DPIRETURN {
 		conn.db.Close()
 		conn.db = nil
 		conn.conn = nil
+	}
+	for key, id := range conn.objectDescIDs {
+		freeObjectDescriptor(id, conn.objectDescs[key])
 	}
 	conn.mu.Unlock()
 

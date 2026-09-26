@@ -44,6 +44,10 @@ func getDiagFromHandle(hndlType int16, hndl C.dhandle) *diagInfo {
 		return h.lastErr
 	case *descHandle:
 		return h.lastErr
+	case *objHandle:
+		return h.lastErr
+	case *objDescHandle:
+		return h.lastErr
 	}
 	return nil
 }

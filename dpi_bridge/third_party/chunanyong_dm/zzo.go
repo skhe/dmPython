@@ -77,6 +77,9 @@ func (td *TypeData) initTypeData() *TypeData {
 
 func (sv TypeData) toStruct(objArr []interface{}, desc *TypeDescriptor) ([]TypeData, error) {
 	size := desc.getStrctMemSize()
+	if len(objArr) != size {
+		return nil, ECGO_STRUCT_MEM_NOT_MATCH.throw()
+	}
 	retData := make([]TypeData, size)
 
 	for i := 0; i < size; i++ {
@@ -87,19 +90,27 @@ func (sv TypeData) toStruct(objArr []interface{}, desc *TypeDescriptor) ([]TypeD
 		}
 
 		switch objArr[i].(type) {
-		case DmStruct, DmArray:
+		case DmStruct, DmArray, *DmStruct, *DmArray:
 			retData[i] = *newTypeData(objArr[i], nil)
 		default:
 			switch desc.m_fieldsObj[i].getDType() {
 			case CLASS, PLTYPE_RECORD:
-				tdArr, err := sv.toStruct(objArr[i].([]interface{}), &desc.m_fieldsObj[i])
+				members, ok := objArr[i].([]interface{})
+				if !ok {
+					return nil, ECGO_INVALID_PARAMETER_VALUE.throw()
+				}
+				tdArr, err := sv.toStruct(members, &desc.m_fieldsObj[i])
 				if err != nil {
 					return nil, err
 				}
 
 				retData[i] = *newTypeData(newDmStructByTypeData(tdArr, &desc.m_fieldsObj[i]), nil)
 			case ARRAY, SARRAY:
-				tdArr, err := sv.toArray(objArr[i].([]interface{}), &desc.m_fieldsObj[i])
+				members, ok := objArr[i].([]interface{})
+				if !ok {
+					return nil, ECGO_INVALID_PARAMETER_VALUE.throw()
+				}
+				tdArr, err := sv.toArray(members, &desc.m_fieldsObj[i])
 				if err != nil {
 					return nil, err
 				}
