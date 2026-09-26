@@ -165,7 +165,17 @@ func describeObjectType(db *sql.DB, owner, typeName string, visiting map[string]
 		if field.schema == "" {
 			continue
 		}
-		// The metadata view stores the referenced type name in ATTR_TYPE_NAME.
+		// Some DM8 versions report the referenced type name in ATTR_TYPE_OWNER.
+		// Use the containing type's owner when that value is not an actual owner.
+		var referencedOID int64
+		err = db.QueryRow("SELECT TYPE_OID FROM ALL_TYPES WHERE OWNER=? AND TYPE_NAME=?", field.schema, field.typeName).Scan(&referencedOID)
+		if err == sql.ErrNoRows && field.schema != owner {
+			field.schema = owner
+			err = nil
+		}
+		if err != nil {
+			return nil, err
+		}
 		var nested *objDescHandle
 		nested, err = describeObjectType(db, field.schema, field.typeName, visiting)
 		if err != nil {
