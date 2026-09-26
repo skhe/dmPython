@@ -760,7 +760,7 @@ func (c *DmConnector) parseDSN(dsn string) (*Properties, string, string, error) 
 			kv := strings.SplitN(kvString, "=", 2)
 			if kv != nil && len(kv) > 1 {
 				value := kv[1]
-				if kv[0] == AppNameKey {
+				if kv[0] == AppNameKey || kv[0] == "svcConfPath" {
 					decoded, err := url.QueryUnescape(value)
 					if err != nil {
 						return nil, "", "", err
@@ -847,6 +847,12 @@ func (c *DmConnector) mergeConfigs(dsn string) error {
 	host = c.remap(host, addressRemapStr)
 
 	c.user = c.remap(c.user, userRemapStr)
+	serviceHost := host
+	if bareHost, _, splitErr := net.SplitHostPort(host); splitErr == nil {
+		if _, ok := ServerGroupMap.Load(strings.ToLower(bareHost)); ok {
+			serviceHost = bareHost
+		}
+	}
 
 	if a := props.GetTrimString(host, ""); a != "" {
 
@@ -858,7 +864,7 @@ func (c *DmConnector) mergeConfigs(dsn string) error {
 			c.group.props = NewProperties()
 			c.group.props.SetProperties(GlobalProperties)
 		}
-	} else if group, ok := ServerGroupMap.Load(strings.ToLower(host)); ok {
+	} else if group, ok := ServerGroupMap.Load(strings.ToLower(serviceHost)); ok {
 
 		c.group = group.(*epGroup)
 	} else {

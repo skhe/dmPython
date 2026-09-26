@@ -139,10 +139,10 @@ func load(filePath string) {
 
 	// 如果设置了连接串上svcConfPath，则串上优先
 	file, err := os.Open(filePath)
-	defer file.Close()
 	if err != nil {
 		return
 	}
+	defer file.Close()
 	fileReader := bufio.NewReader(file)
 
 	// GlobalProperties = NewProperties()

@@ -32,6 +32,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,6 +60,7 @@ type connHandle struct {
 	loginTimeout  int
 	connTimeout   int
 	appName       string
+	svcPath       string
 	txnIsolation  int
 	objectDescs   map[string]*objDescHandle
 	objectDescIDs map[string]uintptr
@@ -181,6 +183,14 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		} else {
 			conn.appName = C.GoString((*C.char)(val))
 		}
+	case DSQL_ATTR_DM_SVC_PATH:
+		if val == nil {
+			conn.svcPath = ""
+		} else if valLen > 0 {
+			conn.svcPath = C.GoStringN((*C.char)(val), C.int(valLen))
+		} else {
+			conn.svcPath = C.GoString((*C.char)(val))
+		}
 	case DSQL_ATTR_SSL_PATH, DSQL_ATTR_SSL_PWD,
 		DSQL_ATTR_UKEY_NAME, DSQL_ATTR_UKEY_PIN,
 		DSQL_ATTR_COMPRESS_MSG, DSQL_ATTR_USE_STMT_POOL,
@@ -188,7 +198,7 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		DSQL_ATTR_RWSEPARATE_PERCENT, DSQL_ATTR_CURSOR_ROLLBACK_BEHAVIOR,
 		DSQL_ATTR_OSAUTH_TYPE, DSQL_ATTR_DDL_AUTOCOMMIT,
 		DSQL_ATTR_COMPATIBLE_MODE, DSQL_ATTR_SHAKE_CRYPTO,
-		DSQL_ATTR_NLS_NUMERIC_CHARACTERS, DSQL_ATTR_DM_SVC_PATH,
+		DSQL_ATTR_NLS_NUMERIC_CHARACTERS,
 		DSQL_ATTR_ACCESS_MODE, DSQL_ATTR_PACKET_SIZE,
 		DSQL_ATTR_CURRENT_CATALOG:
 		// Accept but ignore these for now
@@ -368,6 +378,9 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	}
 	if conn.appName != "" {
 		params = append(params, "appName="+url.QueryEscape(conn.appName))
+	}
+	if conn.svcPath != "" {
+		params = append(params, "svcConfPath="+url.QueryEscape(filepath.Join(conn.svcPath, "dm_svc.conf")))
 	}
 	if len(params) > 0 {
 		dsn += "?" + strings.Join(params, "&")

@@ -82,6 +82,16 @@
 - Regression: `tests/integration/test_p1_array_types.py` covers high-precision
   decimals, Unicode, nulls, empty arrays, length limits, and arrays in objects.
 
+## Patch: resolve service names with the bridge's default port
+
+- Files: `n.go`, `zzm.go`
+- The bridge includes a port in its DSN even for service names. Match the
+  service name before parsing the address as a network endpoint.
+- Only close an opened service config file; a missing file previously caused a
+  nil pointer panic.
+- Regression: `tests/integration/test_p1_connection_matrix.py` verifies service
+  config paths containing spaces and `&`, and failover after a failed handshake.
+
 ## Rollback
 
 - Remove `replace gitee.com/chunanyong/dm => ./third_party/chunanyong_dm` in `dpi_bridge/go.mod`.

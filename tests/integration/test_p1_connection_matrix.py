@@ -6,6 +6,9 @@ import os
 import socket
 import subprocess
 import sys
+import threading
+import uuid
+from contextlib import contextmanager
 
 import pytest
 
@@ -13,6 +16,51 @@ import dmPython
 
 
 pytestmark = [pytest.mark.requires_dm, pytest.mark.p1_contract]
+
+
+@contextmanager
+def ipv6_proxy(conn_params):
+    """Forward one IPv6 loopback connection to the IPv4 test database."""
+    listener = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    listener.settimeout(6)
+    listener.bind(("::1", 0))
+    listener.listen(1)
+    peers = []
+
+    def forward(source, target):
+        try:
+            while data := source.recv(65536):
+                target.sendall(data)
+        except OSError:
+            pass
+        finally:
+            try:
+                target.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+
+    def serve():
+        client, _ = listener.accept()
+        upstream = socket.create_connection((conn_params["server"], conn_params["port"]))
+        peers.extend((client, upstream))
+        directions = [
+            threading.Thread(target=forward, args=(client, upstream), daemon=True),
+            threading.Thread(target=forward, args=(upstream, client), daemon=True),
+        ]
+        for direction in directions:
+            direction.start()
+        for direction in directions:
+            direction.join()
+
+    worker = threading.Thread(target=serve, daemon=True)
+    worker.start()
+    try:
+        yield listener.getsockname()[1]
+    finally:
+        listener.close()
+        for peer in peers:
+            peer.close()
+        worker.join(timeout=1)
 
 
 @pytest.mark.parametrize("address", ["server", "host", "dsn"])
@@ -30,6 +78,121 @@ def test_connection_address_forms(conn_params, address):
             cur.execute("SELECT 1")
             assert cur.fetchone() == (1,)
         assert conn.dsn == f"{host}:{port}"
+
+
+@pytest.mark.parametrize("address", ["server", "host", "dsn"])
+def test_bracketed_ipv6_address_forms(conn_params, address):
+    with ipv6_proxy(conn_params) as port:
+        params = {"user": conn_params["user"], "password": conn_params["password"]}
+        if address == "dsn":
+            params["dsn"] = f"[::1]:{port}"
+        else:
+            params[address] = "[::1]"
+            params["port"] = port
+        with dmPython.connect(**params, login_timeout=2000) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                assert cur.fetchone() == (1,)
+
+
+def test_password_with_dsn_delimiters(conn_params):
+    admin_password = os.environ.get("DM_CI_ADMIN_PASSWORD")
+    container = os.environ.get("DM_BFILE_TEST_CONTAINER")
+    if not admin_password or not container:
+        pytest.skip("special password regression requires a DM test container and admin password")
+
+    name = f"DMPYSPEC_{uuid.uuid4().hex[:8].upper()}"
+    password = "DmPyA1?/#&%+@:"
+    admin_params = {**conn_params, "user": "SYSDBA", "password": admin_password}
+    with dmPython.connect(**admin_params) as admin:
+        with admin.cursor() as cur:
+            try:
+                # The Python statement scanner sees '?' in quoted DDL as a bind marker.
+                # Use the database's SQL client to create this temporary account.
+                script = (
+                    f"conn SYSDBA/{admin_password}@127.0.0.1:5236\n"
+                    f'CREATE USER {name} IDENTIFIED BY "{password}";\n'
+                    f"GRANT RESOURCE TO {name};\nexit\n"
+                )
+                subprocess.run(
+                    ["docker", "exec", "-i", container, "/opt/dmdbms/bin/disql", "/nolog"],
+                    input=script,
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                )
+                cur.execute("SELECT COUNT(*) FROM DBA_USERS WHERE USERNAME = ?", (name,))
+                assert cur.fetchone() == (1,)
+                with dmPython.connect(**{**conn_params, "user": name, "password": password}) as test_conn:
+                    with test_conn.cursor() as test_cur:
+                        test_cur.execute("SELECT 1")
+                        assert test_cur.fetchone() == (1,)
+            finally:
+                cur.execute("SELECT COUNT(*) FROM DBA_USERS WHERE USERNAME = ?", (name,))
+                if cur.fetchone() == (1,):
+                    cur.execute(f"DROP USER {name}")
+                    admin.commit()
+
+
+def test_service_name_from_explicit_config_directory(conn_params, tmp_path):
+    service = f"DMPYSVC_{uuid.uuid4().hex[:8].upper()}"
+    config_dir = tmp_path / "dm config&test"
+    config_dir.mkdir()
+    (config_dir / "dm_svc.conf").write_text(
+        f"{service}={conn_params['server']}:{conn_params['port']}\n",
+        encoding="utf-8",
+    )
+    with dmPython.connect(
+        user=conn_params["user"],
+        password=conn_params["password"],
+        server=service,
+        dmsvc_path=str(config_dir),
+        login_timeout=2000,
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            assert cur.fetchone() == (1,)
+
+
+def test_service_name_fails_over_after_handshake_failure(conn_params, tmp_path):
+    service = f"DMPYFAIL_{uuid.uuid4().hex[:8].upper()}"
+    rejected = threading.Event()
+    listener = socket.socket()
+    listener.settimeout(5)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+
+    def reject_first_endpoint():
+        try:
+            client, _ = listener.accept()
+            rejected.set()
+            client.close()
+        except OSError:
+            pass
+
+    worker = threading.Thread(target=reject_first_endpoint, daemon=True)
+    worker.start()
+    (tmp_path / "dm_svc.conf").write_text(
+        f"{service}=(127.0.0.1:{listener.getsockname()[1]},"
+        f"{conn_params['server']}:{conn_params['port']})\n"
+        f"[{service}]\nEP_SELECTION=1\nSWITCH_TIMES=1\nSWITCH_INTERVAL=0\n",
+        encoding="utf-8",
+    )
+    try:
+        with dmPython.connect(
+            user=conn_params["user"],
+            password=conn_params["password"],
+            server=service,
+            dmsvc_path=str(tmp_path),
+            login_timeout=3000,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                assert cur.fetchone() == (1,)
+        assert rejected.is_set(), "first endpoint was never attempted"
+    finally:
+        listener.close()
+        worker.join(timeout=1)
 
 
 @pytest.mark.parametrize("cursorclass", [dmPython.TupleCursor, dmPython.DictCursor])
