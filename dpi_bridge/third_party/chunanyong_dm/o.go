@@ -119,11 +119,67 @@ func (d DmDecimal) ToBigFloat() *big.Float {
 }
 
 func NewDecimalFromString(s string) (*DmDecimal, error) {
-	num, ok := new(big.Float).SetString(strings.TrimSpace(s))
-	if !ok {
+	return newDecimalFromString(s, 0, 0)
+}
+
+func newDecimalFromString(s string, prec, scale int) (*DmDecimal, error) {
+	s = strings.TrimSpace(s)
+	sign := 1
+	if strings.HasPrefix(s, "-") {
+		sign = -1
+		s = s[1:]
+	} else if strings.HasPrefix(s, "+") {
+		s = s[1:]
+	}
+
+	exponent := 0
+	if i := strings.IndexAny(s, "eE"); i >= 0 {
+		var err error
+		exponent, err = strconv.Atoi(s[i+1:])
+		if err != nil || exponent < -1000 || exponent > 1000 {
+			return nil, ECGO_DATA_CONVERTION_ERROR.throw()
+		}
+		s = s[:i]
+	}
+
+	point := strings.IndexByte(s, '.')
+	fractionalDigits := 0
+	if point >= 0 {
+		fractionalDigits = len(s) - point - 1
+		s = s[:point] + s[point+1:]
+	}
+	if len(s) == 0 {
 		return nil, ECGO_DATA_CONVERTION_ERROR.throw()
 	}
-	return NewDecimalFromBigFloat(num)
+	for i := range s {
+		if s[i] < '0' || s[i] > '9' {
+			return nil, ECGO_DATA_CONVERTION_ERROR.throw()
+		}
+	}
+
+	d := &DmDecimal{sign: sign, weight: exponent - fractionalDigits, prec: prec, scale: scale, Valid: true}
+	d.digits = strings.TrimLeft(s, "0")
+	if d.digits == "" {
+		d.sign = 0
+		return d, nil
+	}
+	trimmed := len(d.digits) - len(strings.TrimRight(d.digits, "0"))
+	d.digits = strings.TrimRight(d.digits, "0")
+	d.weight += trimmed
+	if len(d.digits) > XDEC_MAX_PREC {
+		return nil, ECGO_DATA_TOO_LONG.throw()
+	}
+	if isOdd(d.weight) {
+		d.digits += "0"
+		d.weight--
+	}
+	if isOdd(len(d.digits)) {
+		d.digits = "0" + d.digits
+	}
+	if len(d.digits) > XDEC_MAX_PREC {
+		return nil, ECGO_DATA_TOO_LONG.throw()
+	}
+	return d, nil
 }
 
 func (d DmDecimal) String() string {

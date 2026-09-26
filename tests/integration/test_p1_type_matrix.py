@@ -73,3 +73,30 @@ def test_typed_null_roundtrip(conn, table_name_factory, drop_table, sql_type):
         drop_table(cur, table)
         conn.commit()
         cur.close()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Decimal("12345678901234567890.12345678"), Decimal("12345678901234567890.12345678")),
+        ("12345678901234567890.12345678", Decimal("12345678901234567890.12345678")),
+        (Decimal("-12345678901234567890.12345678"), Decimal("-12345678901234567890.12345678")),
+        ("1234567890123456789012345678E-8", Decimal("12345678901234567890.12345678")),
+    ],
+    ids=["decimal", "text", "negative", "scientific"],
+)
+def test_high_precision_decimal_parameter_preserves_fraction(
+    conn, table_name_factory, drop_table, value, expected
+):
+    table = table_name_factory("DMPY_DECIMAL")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (v DECIMAL(30, 8))")
+        cur.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+        conn.commit()
+        cur.execute(f"SELECT CAST(v AS VARCHAR(80)) FROM {table}")
+        assert Decimal(cur.fetchone()[0]) == expected
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
