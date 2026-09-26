@@ -90,7 +90,14 @@ func (sv TypeData) toStruct(objArr []interface{}, desc *TypeDescriptor) ([]TypeD
 		}
 
 		switch objArr[i].(type) {
-		case DmStruct, DmArray, *DmStruct, *DmArray:
+		case *DmArray:
+			array, err := objArr[i].(*DmArray).createByArrayDescriptor(
+				newArrayDescriptorByTypeDescriptor(&desc.m_fieldsObj[i]), desc.m_conn)
+			if err != nil {
+				return nil, err
+			}
+			retData[i] = *newTypeData(array, nil)
+		case DmStruct, DmArray, *DmStruct:
 			retData[i] = *newTypeData(objArr[i], nil)
 		default:
 			switch desc.m_fieldsObj[i].getDType() {

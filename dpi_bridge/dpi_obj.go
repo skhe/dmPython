@@ -37,12 +37,13 @@ import (
 
 // objDescHandle represents an object type descriptor.
 type objDescHandle struct {
-	name    string
-	schema  string
-	oid     int64
-	sqlType int16
-	fields  []objFieldDesc
-	lastErr *diagInfo
+	name        string
+	schema      string
+	oid         int64
+	sqlType     int16
+	fields      []objFieldDesc
+	maxElements int
+	lastErr     *diagInfo
 }
 
 type objFieldDesc struct {
@@ -87,7 +88,7 @@ func dpi_desc_obj(hcon C.dhcon, schema *C.sdbyte, name *C.sdbyte, objDesc *C.dho
 		owner = strings.ToUpper(conn.user)
 	}
 	typeName := strings.ToUpper(C.GoString((*C.char)(unsafe.Pointer(name))))
-	desc, err := describeObjectType(conn.db, owner, typeName, make(map[string]bool))
+	desc, err := describeObjectType(conn, owner, typeName, make(map[string]bool))
 	if err != nil {
 		conn.lastErr = diagFromError(err)
 		return DSQL_ERROR
@@ -97,10 +98,11 @@ func dpi_desc_obj(hcon C.dhcon, schema *C.sdbyte, name *C.sdbyte, objDesc *C.dho
 	return DSQL_SUCCESS
 }
 
-func describeObjectType(db *sql.DB, owner, typeName string, visiting map[string]bool) (*objDescHandle, error) {
-	if db == nil {
+func describeObjectType(conn *connHandle, owner, typeName string, visiting map[string]bool) (*objDescHandle, error) {
+	if conn.db == nil {
 		return nil, fmt.Errorf("not connected")
 	}
+	db := conn.db
 	key := owner + "." + typeName
 	if visiting[key] {
 		return nil, fmt.Errorf("recursive object type %s is not supported", key)
@@ -123,6 +125,8 @@ func describeObjectType(db *sql.DB, owner, typeName string, visiting map[string]
 		desc.sqlType = DSQL_CLASS
 	case "RECORD":
 		desc.sqlType = DSQL_RECORD
+	case "TYPE":
+		return describeArrayType(conn, desc)
 	default:
 		return nil, fmt.Errorf("object type %s has unsupported kind %s", key, typeCode)
 	}
@@ -177,7 +181,7 @@ func describeObjectType(db *sql.DB, owner, typeName string, visiting map[string]
 			return nil, err
 		}
 		var nested *objDescHandle
-		nested, err = describeObjectType(db, field.schema, field.typeName, visiting)
+		nested, err = describeObjectType(conn, field.schema, field.typeName, visiting)
 		if err != nil {
 			return nil, err
 		}
@@ -185,6 +189,43 @@ func describeObjectType(db *sql.DB, owner, typeName string, visiting map[string]
 		field.sqlType = nested.sqlType
 	}
 	return desc, nil
+}
+
+func describeArrayType(conn *connHandle, desc *objDescHandle) (*objDescHandle, error) {
+	if conn.conn == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+	info, err := dm.DescribeArrayType(conn.conn, desc.schema+"."+desc.name)
+	if err != nil {
+		return nil, err
+	}
+	switch info.Kind {
+	case dm.ARRAY:
+		desc.sqlType = DSQL_ARRAY
+	case dm.SARRAY:
+		desc.sqlType = DSQL_SARRAY
+	default:
+		return nil, fmt.Errorf("type %s.%s is not an array (driver kind %d, element %d, limit %d)", desc.schema, desc.name, info.Kind, info.ElementKind, info.MaxElements)
+	}
+	if info.ElementKind == dm.ARRAY || info.ElementKind == dm.SARRAY || info.ElementKind == dm.CLASS || info.ElementKind == dm.PLTYPE_RECORD {
+		return nil, fmt.Errorf("array %s.%s has unsupported complex elements", desc.schema, desc.name)
+	}
+	field := objFieldDesc{sqlType: int16(info.ElementKind), precision: int16(info.ElementPrecision), scale: int16(info.ElementScale)}
+	if !supportedArrayElement(field.sqlType) {
+		return nil, fmt.Errorf("array %s.%s has unsupported element type %d", desc.schema, desc.name, info.ElementKind)
+	}
+	desc.fields = []objFieldDesc{field}
+	desc.maxElements = info.MaxElements
+	return desc, nil
+}
+
+func supportedArrayElement(sqlType int16) bool {
+	switch sqlType {
+	case DSQL_INT, DSQL_BIGINT, DSQL_SMALLINT, DSQL_DEC, DSQL_VARCHAR, DSQL_CHAR:
+		return true
+	default:
+		return false
+	}
 }
 
 func (conn *connHandle) columnObjectDesc(typeName string) (*objDescHandle, uintptr, error) {
@@ -205,7 +246,7 @@ func (conn *connHandle) columnObjectDesc(typeName string) (*objDescHandle, uintp
 		return desc, id, nil
 	}
 	conn.mu.Unlock()
-	desc, err := describeObjectType(conn.db, owner, typeName, make(map[string]bool))
+	desc, err := describeObjectType(conn, owner, typeName, make(map[string]bool))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -320,7 +361,11 @@ func dpi_bind_obj_desc(hobj C.dhobj, hdesc C.dhobjdesc) C.DPIRETURN {
 		return DSQL_INVALID_HANDLE
 	}
 	obj.desc = desc
-	obj.values = make([]interface{}, len(desc.fields))
+	if desc.sqlType == DSQL_ARRAY || desc.sqlType == DSQL_SARRAY {
+		obj.values = nil
+	} else {
+		obj.values = make([]interface{}, len(desc.fields))
+	}
 	return DSQL_SUCCESS
 }
 
@@ -342,21 +387,32 @@ func dpi_set_obj_val(hobj C.dhobj, nth C.udint4, ctype C.udint2, val C.dpointer,
 	if !ok || !typed {
 		return DSQL_INVALID_HANDLE
 	}
-	if obj.desc == nil || nth < 1 || int(nth) > len(obj.values) {
+	if obj.desc == nil || nth < 1 ||
+		(obj.desc.sqlType != DSQL_ARRAY && obj.desc.sqlType != DSQL_SARRAY && int(nth) > len(obj.values)) ||
+		(obj.desc.maxElements > 0 && int(nth) > obj.desc.maxElements) {
 		obj.lastErr = &diagInfo{errorCode: -1, message: "object value position is invalid"}
 		return DSQL_ERROR
+	}
+	if obj.desc.sqlType == DSQL_ARRAY || obj.desc.sqlType == DSQL_SARRAY {
+		for len(obj.values) < int(nth) {
+			obj.values = append(obj.values, nil)
+		}
 	}
 	var valueToSet interface{}
 	if valLen != C.slength(DSQL_NULL_DATA) {
 		switch int16(ctype) {
-		case DSQL_C_CLASS, DSQL_C_RECORD:
+		case DSQL_C_CLASS, DSQL_C_RECORD, DSQL_C_ARRAY, DSQL_C_SARRAY:
 			child, childOK := getHandle(ptrToHandle(unsafe.Pointer(val)))
 			childObj, typed := child.(*objHandle)
 			if !childOK || !typed || childObj.desc == nil {
 				obj.lastErr = &diagInfo{errorCode: -1, message: "nested object handle is invalid"}
 				return DSQL_ERROR
 			}
-			valueToSet = append([]interface{}(nil), childObj.values...)
+			if childObj.desc.sqlType == DSQL_ARRAY || childObj.desc.sqlType == DSQL_SARRAY {
+				valueToSet = childObj.driverValue()
+			} else {
+				valueToSet = append([]interface{}(nil), childObj.values...)
+			}
 		default:
 			indicator := valLen
 			valueToSet = extractBoundValue(bindParamInfo{cType: int16(ctype), dataPtr: unsafe.Pointer(val), bufLen: int64(valLen), indPtr: &indicator})
@@ -367,8 +423,11 @@ func dpi_set_obj_val(hobj C.dhobj, nth C.udint4, ctype C.udint2, val C.dpointer,
 	return DSQL_SUCCESS
 }
 
-func (obj *objHandle) driverValue() *dm.DmStruct {
+func (obj *objHandle) driverValue() interface{} {
 	values := append([]interface{}(nil), obj.values...)
+	if obj.desc.sqlType == DSQL_ARRAY || obj.desc.sqlType == DSQL_SARRAY {
+		return dm.NewDmArray(obj.desc.schema+"."+obj.desc.name, values)
+	}
 	return dm.NewDmStruct(obj.desc.schema+"."+obj.desc.name, values)
 }
 
@@ -380,6 +439,25 @@ func fillObjectHandle(value interface{}, handle unsafe.Pointer, desc *objDescHan
 	obj, typed := stored.(*objHandle)
 	if !ok || !typed {
 		return fmt.Errorf("object handle is invalid")
+	}
+	if desc.sqlType == DSQL_ARRAY || desc.sqlType == DSQL_SARRAY {
+		valueArray, ok := value.(*dm.DmArray)
+		if !ok {
+			return fmt.Errorf("expected DM array value, got %T", value)
+		}
+		items, err := valueArray.GetArray()
+		if err != nil {
+			return err
+		}
+		if items == nil {
+			obj.values = nil
+		} else if values, ok := items.([]interface{}); ok {
+			obj.values = values
+		} else {
+			return fmt.Errorf("unexpected DM array items %T", items)
+		}
+		obj.desc = desc
+		return nil
 	}
 	var valueObject *dm.DmStruct
 	switch v := value.(type) {
@@ -413,7 +491,10 @@ func dpi_get_obj_val(hobj C.dhobj, nth C.udint4, ctype C.udint2, val C.dpointer,
 		obj.lastErr = &diagInfo{errorCode: -1, message: "object value position is invalid"}
 		return DSQL_ERROR
 	}
-	field := obj.desc.fields[int(nth)-1]
+	field := obj.desc.fields[0]
+	if obj.desc.sqlType != DSQL_ARRAY && obj.desc.sqlType != DSQL_SARRAY {
+		field = obj.desc.fields[int(nth)-1]
+	}
 	bind := bindColInfo{cType: int16(ctype), dataPtr: unsafe.Pointer(val), bufLen: int64(bufLen), indPtr: valLen}
 	if err := writeValueToBinding(obj.values[int(nth)-1], bind, field.sqlType, field.nested); err != nil {
 		obj.lastErr = diagFromError(err)
@@ -430,7 +511,11 @@ func dpi_get_obj_attr(hobj C.dhobj, nth C.udint4, attrID C.udint2, buf C.dpointe
 	if !ok || !typed || obj.desc == nil || attrID != 1 || buf == nil {
 		return DSQL_INVALID_HANDLE
 	}
-	*(*C.udint4)(unsafe.Pointer(buf)) = C.udint4(len(obj.desc.fields))
+	count := len(obj.desc.fields)
+	if obj.desc.sqlType == DSQL_ARRAY || obj.desc.sqlType == DSQL_SARRAY {
+		count = len(obj.values)
+	}
+	*(*C.udint4)(unsafe.Pointer(buf)) = C.udint4(count)
 	if length != nil {
 		*length = 4
 	}
