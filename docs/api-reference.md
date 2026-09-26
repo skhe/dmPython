@@ -103,6 +103,8 @@ dmPython.connect(
 - `shutdown(shutdown_type=dmPython.SHUTDOWN_DEFAULT)`
 - `explain(statement)`
 - `ping(reconnect=0)`
+
+手动提交模式下，同一 Python 连接的语句、`commit()` 和 `rollback()` 固定使用同一条数据库连接。若数据库重启或执行超时使该物理连接失效，提交会报错；应丢弃该连接，重新建连后核对写入结果。自动提交模式中的已打开连接可在一次可见的通信错误后恢复，但失败语句不会被自动重放。
 - `__enter__()`
 - `__exit__(exc_type, exc_value, exc_traceback)`
 

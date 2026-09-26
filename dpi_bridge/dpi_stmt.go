@@ -85,8 +85,9 @@ type stmtHandle struct {
 	conn *connHandle
 
 	// Prepared statement
-	prepared *sql.Stmt
-	sql      string
+	prepared           *sql.Stmt
+	sql                string
+	preparedGeneration uint64
 
 	// Result set
 	rows        *sql.Rows
@@ -374,7 +375,7 @@ func dpi_prepare(hstmt C.dhstmt, sqlTxt *C.sdbyte) C.DPIRETURN {
 		return DSQL_ERROR
 	}
 
-	prepared, dbErr := stmt.conn.db.Prepare(sqlStr)
+	prepared, dbErr := prepareOnConnection(stmt.conn, sqlStr)
 	if dbErr != nil {
 		stmt.lastErr = &diagInfo{
 			errorCode: -1,
@@ -383,6 +384,7 @@ func dpi_prepare(hstmt C.dhstmt, sqlTxt *C.sdbyte) C.DPIRETURN {
 		return DSQL_ERROR
 	}
 	stmt.prepared = prepared
+	stmt.preparedGeneration = stmt.conn.modeGeneration
 
 	// Count parameters (count '?' in SQL)
 	paramCount := uint16(0)
@@ -423,6 +425,17 @@ func dpi_exec(hstmt C.dhstmt) C.DPIRETURN {
 		stmt.lastErr = &diagInfo{errorCode: -1, message: "Statement not prepared"}
 		return DSQL_ERROR
 	}
+	if stmt.preparedGeneration != stmt.conn.modeGeneration {
+		stmt.prepared.Close()
+		stmt.prepared = nil
+		prepared, dbErr := prepareOnConnection(stmt.conn, stmt.sql)
+		if dbErr != nil {
+			stmt.lastErr = diagFromError(dbErr)
+			return DSQL_ERROR
+		}
+		stmt.prepared = prepared
+		stmt.preparedGeneration = stmt.conn.modeGeneration
+	}
 
 	// Build args from parameter bindings
 	args := buildExecArgs(stmt)
@@ -456,6 +469,13 @@ func dpi_exec(hstmt C.dhstmt) C.DPIRETURN {
 	}
 
 	return DSQL_SUCCESS
+}
+
+func prepareOnConnection(conn *connHandle, query string) (*sql.Stmt, error) {
+	if conn.pinned != nil {
+		return conn.pinned.PrepareContext(context.Background(), query)
+	}
+	return conn.db.Prepare(query)
 }
 
 //export dpi_exec_direct
@@ -493,7 +513,13 @@ func dpi_exec_direct(hstmt C.dhstmt, sqlTxt *C.sdbyte) C.DPIRETURN {
 	defer cancel()
 
 	if isQuery(sqlStr) {
-		rows, dbErr := stmt.conn.db.QueryContext(ctx, sqlStr)
+		var rows *sql.Rows
+		var dbErr error
+		if stmt.conn.pinned != nil {
+			rows, dbErr = stmt.conn.pinned.QueryContext(ctx, sqlStr)
+		} else {
+			rows, dbErr = stmt.conn.db.QueryContext(ctx, sqlStr)
+		}
 		if dbErr != nil {
 			stmt.lastErr = diagFromError(dbErr)
 			return DSQL_ERROR
@@ -505,7 +531,13 @@ func dpi_exec_direct(hstmt C.dhstmt, sqlTxt *C.sdbyte) C.DPIRETURN {
 			return DSQL_ERROR
 		}
 	} else {
-		result, dbErr := stmt.conn.db.ExecContext(ctx, sqlStr)
+		var result sql.Result
+		var dbErr error
+		if stmt.conn.pinned != nil {
+			result, dbErr = stmt.conn.pinned.ExecContext(ctx, sqlStr)
+		} else {
+			result, dbErr = stmt.conn.db.ExecContext(ctx, sqlStr)
+		}
 		if dbErr != nil {
 			stmt.lastErr = diagFromError(dbErr)
 			return DSQL_ERROR

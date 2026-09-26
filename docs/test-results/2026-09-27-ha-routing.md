@@ -82,3 +82,18 @@ EP_SELECTION=1
 SWITCH_TIMES=1
 SWITCH_INTERVAL=0
 ```
+
+## Existing connection after a single-node restart
+
+An independent, disposable ARM DM8 instance was restarted while Python 3.10
+held an open autocommit connection. The same Python connection queried again
+after one visible communication error. A second experiment inserted an exact
+`DECIMAL(30,8)` value in manual-commit mode and verified that a separate
+connection could not see it. Before the bridge fix, a database restart made
+`commit()` return success even though the row was lost. Manual transactions now
+pin one physical connection; `commit()` reports an error after that connection
+is lost, and a fresh connection confirms the row was not persisted. The
+repeatable check is `scripts/verify_dm_restart_transaction.py`; it also runs
+in a dedicated GitHub ARM CI job. Local full real-database regression with a
+dedicated test user passed 193 cases. A separate primary/standby takeover with
+an already-open connection has still not been verified.

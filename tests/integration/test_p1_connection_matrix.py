@@ -240,6 +240,53 @@ def test_autocommit_on_persists_without_explicit_commit(
         cur.close()
 
 
+def test_autocommit_toggle_preserves_transaction_boundary(
+    conn_params, table_name_factory
+):
+    table = table_name_factory("DMPY_AUTOCOMMIT_TOGGLE")
+    with dmPython.connect(
+        **conn_params, autoCommit=dmPython.DSQL_AUTOCOMMIT_ON
+    ) as writer, dmPython.connect(
+        **conn_params, autoCommit=dmPython.DSQL_AUTOCOMMIT_ON
+    ) as reader:
+        with writer.cursor() as cur:
+            cur.execute(f"CREATE TABLE {table} (ID INT PRIMARY KEY)")
+        try:
+            with writer.cursor() as cur:
+                cur.prepare(f"INSERT INTO {table} VALUES (?)")
+                writer.autocommit = dmPython.DSQL_AUTOCOMMIT_OFF
+                cur.execute(f"INSERT INTO {table} VALUES (?)", (1,))
+            with reader.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                assert cur.fetchone() == (0,)
+            writer.commit()
+            with reader.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                assert cur.fetchone() == (1,)
+
+            writer.autocommit = dmPython.DSQL_AUTOCOMMIT_ON
+            with writer.cursor() as cur:
+                cur.execute(f"INSERT INTO {table} VALUES (2)")
+            with reader.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                assert cur.fetchone() == (2,)
+
+            with writer.cursor() as cur:
+                cur.prepare(f"INSERT INTO {table} VALUES (?)")
+                writer.autocommit = dmPython.DSQL_AUTOCOMMIT_OFF
+                cur.execute(f"INSERT INTO {table} VALUES (?)", (3,))
+            with reader.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                assert cur.fetchone() == (2,)
+            writer.autocommit = dmPython.DSQL_AUTOCOMMIT_ON
+            with reader.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                assert cur.fetchone() == (3,)
+        finally:
+            with reader.cursor() as cur:
+                cur.execute(f"DROP TABLE {table}")
+
+
 def test_isolation_connect_option(conn_params):
     with dmPython.connect(**conn_params, txn_isolation=dmPython.ISO_LEVEL_READ_COMMITTED) as conn:
         assert int(conn.txn_isolation) == int(dmPython.ISO_LEVEL_READ_COMMITTED)
@@ -462,8 +509,21 @@ except dmPython.Error:
     print(time.monotonic() - start)
 else:
     raise AssertionError("blocked update unexpectedly completed")
-cur.execute("SELECT 1")
-assert cur.fetchone() == (1,)
+try:
+    cur.execute("SELECT 1")
+except dmPython.Error:
+    pass
+else:
+    raise AssertionError("lost manual transaction connection stayed usable")
+with dmPython.connect(
+    user=os.environ["DM_TEST_USER"],
+    password=os.environ["DM_TEST_PASSWORD"],
+    server=os.environ["DM_TEST_HOST"],
+    port=int(os.environ["DM_TEST_PORT"]),
+) as fresh:
+    with fresh.cursor() as fresh_cur:
+        fresh_cur.execute("SELECT 1")
+        assert fresh_cur.fetchone() == (1,)
 """
     try:
         cur.execute(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, v INTEGER)")
