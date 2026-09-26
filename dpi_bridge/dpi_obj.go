@@ -129,7 +129,7 @@ func describeObjectType(conn *connHandle, owner, typeName string, visiting map[s
 	case "RECORD":
 		desc.sqlType = DSQL_RECORD
 	case "TYPE":
-		return describeArrayType(conn, desc)
+		return describeArrayType(conn, desc, visiting)
 	default:
 		return nil, fmt.Errorf("object type %s has unsupported kind %s", key, typeCode)
 	}
@@ -194,7 +194,7 @@ func describeObjectType(conn *connHandle, owner, typeName string, visiting map[s
 	return desc, nil
 }
 
-func describeArrayType(conn *connHandle, desc *objDescHandle) (*objDescHandle, error) {
+func describeArrayType(conn *connHandle, desc *objDescHandle, visiting map[string]bool) (*objDescHandle, error) {
 	if conn.conn == nil {
 		return nil, fmt.Errorf("not connected")
 	}
@@ -210,11 +210,28 @@ func describeArrayType(conn *connHandle, desc *objDescHandle) (*objDescHandle, e
 	default:
 		return nil, fmt.Errorf("type %s.%s is not an array (driver kind %d, element %d, limit %d)", desc.schema, desc.name, info.Kind, info.ElementKind, info.MaxElements)
 	}
-	if info.ElementKind == dm.ARRAY || info.ElementKind == dm.SARRAY || info.ElementKind == dm.CLASS || info.ElementKind == dm.PLTYPE_RECORD {
-		return nil, fmt.Errorf("array %s.%s has unsupported complex elements", desc.schema, desc.name)
-	}
 	field := objFieldDesc{sqlType: int16(info.ElementKind), precision: int16(info.ElementPrecision), scale: int16(info.ElementScale)}
-	if !supportedArrayElement(field.sqlType) {
+	if info.ElementKind == dm.CLASS || info.ElementKind == dm.PLTYPE_RECORD {
+		if info.ElementTypeName == "" {
+			return nil, fmt.Errorf("array %s.%s has unnamed object elements", desc.schema, desc.name)
+		}
+		field.schema, field.typeName = desc.schema, info.ElementTypeName
+		if info.ElementTypeOID > 0 {
+			var visibleOwner, visibleName string
+			err = conn.db.QueryRow("SELECT OWNER, TYPE_NAME FROM ALL_TYPES WHERE TYPE_OID=?", info.ElementTypeOID).Scan(&visibleOwner, &visibleName)
+			if err != nil && err != sql.ErrNoRows {
+				return nil, err
+			}
+			if err == nil {
+				field.schema, field.typeName = visibleOwner, visibleName
+			}
+		}
+		field.nested, err = describeObjectType(conn, field.schema, field.typeName, visiting)
+		if err != nil {
+			return nil, err
+		}
+		field.sqlType = field.nested.sqlType
+	} else if !supportedArrayElement(field.sqlType) {
 		return nil, fmt.Errorf("array %s.%s has unsupported element type %d", desc.schema, desc.name, info.ElementKind)
 	}
 	desc.fields = []objFieldDesc{field}
@@ -528,13 +545,20 @@ func dpi_get_obj_attr(hobj C.dhobj, nth C.udint4, attrID C.udint2, buf C.dpointe
 //export dpi_get_obj_desc_attr
 func dpi_get_obj_desc_attr(objDesc C.dhobjdesc, nth C.udint4, attrID C.udint2, buf C.dpointer, bufLen C.udint4, length *C.slength) C.DPIRETURN {
 	desc, ok := objectDescriptor(objDesc)
-	if !ok || buf == nil || int(nth) > len(desc.fields) {
+	if !ok || buf == nil {
+		return DSQL_INVALID_HANDLE
+	}
+	fieldIndex := int(nth) - 1
+	if nth > 0 && (desc.sqlType == DSQL_ARRAY || desc.sqlType == DSQL_SARRAY) {
+		fieldIndex = 0
+	}
+	if nth > 0 && fieldIndex >= len(desc.fields) {
 		return DSQL_INVALID_HANDLE
 	}
 	name, schema, sqlType, precision, scale, count := desc.name, desc.schema, desc.sqlType, int16(0), int16(0), len(desc.fields)
 	var field *objFieldDesc
 	if nth > 0 {
-		field = &desc.fields[int(nth)-1]
+		field = &desc.fields[fieldIndex]
 		name, schema, sqlType, precision, scale, count = field.name, field.schema, field.sqlType, field.precision, field.scale, 0
 		if field.nested != nil {
 			count = len(field.nested.fields)

@@ -145,13 +145,24 @@ func (sv TypeData) toArray(objArr []interface{}, desc *TypeDescriptor) ([]TypeDa
 			continue
 		}
 
-		switch objArr[i].(type) {
-		case DmStruct, DmArray:
-			retData[i] = *newTypeData(objArr[i], nil)
+		switch value := objArr[i].(type) {
+		case *DmArray:
+			array, err := value.createByArrayDescriptor(
+				newArrayDescriptorByTypeDescriptor(desc.m_arrObj), desc.m_conn)
+			if err != nil {
+				return nil, err
+			}
+			retData[i] = *newTypeData(array, nil)
+		case DmStruct, DmArray, *DmStruct:
+			retData[i] = *newTypeData(value, nil)
 		default:
 			switch desc.m_arrObj.getDType() {
 			case CLASS, PLTYPE_RECORD:
-				tdArr, err := sv.toStruct(objArr[i].([]interface{}), desc.m_arrObj)
+				members, ok := objArr[i].([]interface{})
+				if !ok {
+					return nil, ECGO_INVALID_PARAMETER_VALUE.throw()
+				}
+				tdArr, err := sv.toStruct(members, desc.m_arrObj)
 				if err != nil {
 					return nil, err
 				}
@@ -161,14 +172,18 @@ func (sv TypeData) toArray(objArr []interface{}, desc *TypeDescriptor) ([]TypeDa
 				tmp, ok := objArr[i].([]interface{})
 
 				if !ok && desc.m_arrObj.m_arrObj != nil {
-					obj, err := sv.makeupObjToArr(tmp[i], desc.m_arrObj)
+					obj, err := sv.makeupObjToArr(objArr[i], desc.m_arrObj)
 					if err != nil {
 						return nil, err
 					}
 					objArr[i] = obj
+					tmp = obj
+				}
+				if tmp == nil {
+					return nil, ECGO_INVALID_PARAMETER_VALUE.throw()
 				}
 
-				tdArr, err := sv.toArray(objArr[i].([]interface{}), desc.m_arrObj)
+				tdArr, err := sv.toArray(tmp, desc.m_arrObj)
 				if err != nil {
 					return nil, err
 				}

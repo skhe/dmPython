@@ -115,6 +115,27 @@
 - Regression: `tests/integration/test_p1_array_types.py` covers high-precision
   decimals, Unicode, nulls, empty arrays, length limits, and arrays in objects.
 
+## Patch: describe complex array elements and reject invalid nested values
+
+- Files: `type_info.go`, `zzo.go`
+- Expose the element type name and OID without querying privileged
+  `SYS.SYSOBJECTS`; the bridge resolves visible object types through
+  `ALL_TYPES` and supplies nested descriptors for arrays of objects.
+- The bridge treats nested fetch handle slots as outputs and allocates a fresh
+  handle when a slot contains no live object handle. This avoids depending on
+  uninitialized C stack values, which failed on Linux ARM runners.
+- Encode pointer-valued nested arrays and reject malformed complex elements
+  instead of panicking on an invalid type assertion or nil slice index.
+- Regression: `tests/integration/test_p1_array_types.py` covers an array of
+  nullable objects and nested arrays with `DECIMAL(30,8)`; `complex_array_test.go`
+  checks malformed nested values.
+
+## Patch: verify modern SSL certificates
+
+- File: `security/zzi_test.go`
+- Local TLS handshakes verify CA trust and DNS/IP SAN matching, including a
+  bracketed IPv6 address, and reject a wrong hostname or untrusted CA.
+
 ## Patch: resolve service names with the bridge's default port
 
 - Files: `n.go`, `zzm.go`

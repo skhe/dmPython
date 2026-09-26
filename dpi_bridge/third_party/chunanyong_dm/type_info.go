@@ -5,6 +5,8 @@ package dm
 type ArrayTypeInfo struct {
 	Kind             int
 	ElementKind      int
+	ElementTypeName  string
+	ElementTypeOID   int
 	ElementPrecision int
 	ElementScale     int
 	MaxElements      int
@@ -29,9 +31,19 @@ func DescribeArrayType(conn *DmConnection, typeName string) (ArrayTypeInfo, erro
 	if kind == SARRAY {
 		maxElements = root.getStaticArrayLength()
 	}
+	elementTypeName := ""
+	elementTypeOID := 0
+	if item.getDType() == CLASS || item.getDType() == PLTYPE_RECORD ||
+		item.getDType() == ARRAY || item.getDType() == SARRAY {
+		// getFulName queries SYS.SYSOBJECTS, which regular accounts cannot read.
+		elementTypeName = item.m_sqlName.m_name
+		elementTypeOID = item.getObjId()
+	}
 	return ArrayTypeInfo{
 		Kind:             kind,
 		ElementKind:      item.getDType(),
+		ElementTypeName:  elementTypeName,
+		ElementTypeOID:   elementTypeOID,
 		ElementPrecision: item.getPrec(),
 		ElementScale:     item.getScale(),
 		MaxElements:      maxElements,

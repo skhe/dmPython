@@ -99,3 +99,39 @@ def test_unknown_object_type_reports_error(conn, table_name_factory):
     type_name = table_name_factory("DMPY_MISSING")
     with pytest.raises(dmPython.DatabaseError, match="not visible"):
         dmPython.objectvar(conn, type_name)
+
+
+def test_nested_object_null_members_roundtrip(conn, table_name_factory, drop_table):
+    child = table_name_factory("DMPY_NULL_CHILD")
+    parent = table_name_factory("DMPY_NULL_PARENT")
+    table = table_name_factory("DMPY_NULL_OBJECT_TAB")
+    cases = [[1, None], [2, [None, None]], [3, [Decimal("0.00000001"), None]]]
+    cur = conn.cursor()
+    created = []
+    try:
+        cur.execute(f"CREATE TYPE {child} AS OBJECT (AMOUNT DECIMAL(30,8), LABEL VARCHAR(20))")
+        created.append(("TYPE", child))
+        cur.execute(f"CREATE TYPE {parent} AS OBJECT (ID INTEGER, ITEM {child})")
+        created.append(("TYPE", parent))
+        cur.execute(f"CREATE TABLE {table} (V {parent})")
+        created.append(("TABLE", table))
+        conn.commit()
+
+        for fields in cases:
+            value = dmPython.objectvar(conn, parent)
+            value.setvalue(fields)
+            cur.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+        conn.commit()
+
+        cur.execute(f"SELECT V FROM {table} ORDER BY V.ID")
+        assert [row[0].getvalue() for row in cur.fetchall()] == cases
+    finally:
+        conn.rollback()
+        with conn.cursor() as cleanup:
+            for kind, name in reversed(created):
+                if kind == "TABLE":
+                    drop_table(cleanup, name)
+                else:
+                    cleanup.execute(f"DROP TYPE {name}")
+        conn.commit()
+        cur.close()
