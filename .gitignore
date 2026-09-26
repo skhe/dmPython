@@ -31,6 +31,7 @@ dmPython_trace.log
 
 # Testing
 .pytest_cache/
+ssl-modern/
 
 # Local technical notes
 TECHNICAL_REPORT.md

@@ -159,12 +159,30 @@ jobs:
           TZ: Asia/Shanghai
         run: python -m pytest -q tests/ssl --junitxml=pytest-dm-ssl.xml
 
+      - name: Replace bundled SSL certificate with a SAN certificate
+        run: bash scripts/prepare_dm_modern_ssl_ci.sh
+
+      - name: Run modern server certificate regression
+        timeout-minutes: 10
+        env:
+          TZ: Asia/Shanghai
+        run: |
+          export DM_SSL_MODERN_HOST="$DM_SSL_TEST_HOST"
+          export DM_SSL_MODERN_PORT="$DM_SSL_TEST_PORT"
+          export DM_SSL_MODERN_USER="$DM_SSL_TEST_USER"
+          export DM_SSL_MODERN_PASSWORD="$DM_SSL_TEST_PASSWORD"
+          export DM_SSL_MODERN_PATH="$PWD/ssl-modern/client"
+          export DM_SSL_MODERN_BAD_CA="$PWD/ssl-certs/ca-cert.pem"
+          python -m pytest -q tests/ssl_modern --junitxml=pytest-dm-ssl-modern.xml
+
       - name: Upload SSL regression evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: real-dm-ssl-arm-py3.10
-          path: pytest-dm-ssl.xml
+          path: |
+            pytest-dm-ssl.xml
+            pytest-dm-ssl-modern.xml
           if-no-files-found: ignore
 
       - name: Show SSL database logs on failure
