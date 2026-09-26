@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -351,6 +352,12 @@ func (innerRows *innerRows) ColumnTypeDatabaseTypeName(index int) string {
 		return ""
 	}
 	if column := innerRows.checkIndex(index); column != nil {
+		if isComplexType(int(column.colType), int(column.scale)) && column.typeDescriptor != nil &&
+			column.typeDescriptor.m_sqlName != nil && column.typeDescriptor.m_sqlName.m_schId > 0 {
+			// The column schema is the table owner, which may differ from the type owner.
+			// Pass the server's schema ID to the bridge for an ALL_OBJECTS lookup.
+			return column.typeName + "@" + strconv.Itoa(column.typeDescriptor.m_sqlName.m_schId)
+		}
 		return column.typeName
 	}
 	return ""

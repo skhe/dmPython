@@ -30,6 +30,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -250,10 +251,23 @@ func supportedArrayElement(sqlType int16) bool {
 
 func (conn *connHandle) columnObjectDesc(typeName string) (*objDescHandle, uintptr, error) {
 	typeName = strings.ToUpper(typeName)
+	owner := strings.ToUpper(conn.user)
+	if name, schemaID, tagged := strings.Cut(typeName, "@"); tagged {
+		id, err := strconv.Atoi(schemaID)
+		if err != nil || id <= 0 {
+			return nil, 0, fmt.Errorf("invalid type schema ID %q", schemaID)
+		}
+		if err := conn.db.QueryRow("SELECT OBJECT_NAME FROM ALL_OBJECTS WHERE OBJECT_ID=? AND OBJECT_TYPE='SCH'", id).Scan(&owner); err != nil {
+			return nil, 0, err
+		}
+		typeName = name
+	}
 	if typeName == "" || objectScalarType(typeName) != 0 {
 		return nil, 0, fmt.Errorf("not an object type")
 	}
-	owner := strings.ToUpper(conn.user)
+	if qualifiedOwner, qualifiedName, qualified := strings.Cut(typeName, "."); qualified {
+		owner, typeName = qualifiedOwner, qualifiedName
+	}
 	var oid int64
 	if err := conn.db.QueryRow("SELECT TYPE_OID FROM ALL_TYPES WHERE OWNER=? AND TYPE_NAME=?", owner, typeName).Scan(&oid); err != nil {
 		return nil, 0, err
