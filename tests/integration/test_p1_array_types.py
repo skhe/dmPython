@@ -191,7 +191,7 @@ def test_varray_of_varray_keeps_decimal_elements(conn, table_name_factory, drop_
         cur.close()
 
 
-def test_cross_schema_varray_of_objects(conn, conn_params, table_name_factory):
+def test_cross_schema_objects_and_varrays(conn, conn_params, table_name_factory):
     admin_password = os.environ.get("DM_CI_ADMIN_PASSWORD")
     if not admin_password:
         pytest.skip("cross-schema type regression requires the admin test password")
@@ -200,6 +200,7 @@ def test_cross_schema_varray_of_objects(conn, conn_params, table_name_factory):
     array_type = table_name_factory("DMPY_SHARED_ARRAY")
     table = table_name_factory("DMPY_SHARED_TAB")
     local_table = table_name_factory("DMPY_REF_SHARED")
+    local_object_table = table_name_factory("DMPY_REF_ITEM")
     values = [[Decimal("12345678901234567890.12345678"), "汉字"], None]
     admin = dmPython.connect(**{**conn_params, "user": "SYSDBA", "password": admin_password})
     created = []
@@ -225,20 +226,29 @@ def test_cross_schema_varray_of_objects(conn, conn_params, table_name_factory):
             local_created.append(("TYPE", array_type))
             cur.execute(f"CREATE TABLE {local_table} (V SYSDBA.{array_type})")
             local_created.append(("TABLE", local_table))
+            cur.execute(f"CREATE TABLE {local_object_table} (V SYSDBA.{object_type})")
+            local_created.append(("TABLE", local_object_table))
         conn.commit()
 
         value = dmPython.objectvar(conn, array_type, schema="SYSDBA")
         assert value.type.schema == "SYSDBA"
         value.setvalue(values)
+        item = dmPython.objectvar(conn, object_type, schema="SYSDBA")
+        item.setvalue(values[0])
         with conn.cursor() as cur:
             cur.execute(f"INSERT INTO SYSDBA.{table} VALUES (?)", (value,))
             cur.execute(f"INSERT INTO {local_table} VALUES (?)", (value,))
+            cur.execute(f"INSERT INTO {local_object_table} VALUES (?)", (item,))
             conn.commit()
             for source in (f"SYSDBA.{table}", local_table):
                 cur.execute(f"SELECT V FROM {source}")
                 fetched = cur.fetchone()[0]
                 assert fetched.type.schema == "SYSDBA"
                 assert fetched.getvalue() == values
+            cur.execute(f"SELECT V FROM {local_object_table}")
+            fetched_item = cur.fetchone()[0]
+            assert fetched_item.type.schema == "SYSDBA"
+            assert fetched_item.getvalue() == values[0]
     finally:
         conn.rollback()
         with conn.cursor() as cur:

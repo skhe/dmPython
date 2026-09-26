@@ -136,6 +136,16 @@
 - Local TLS handshakes verify CA trust and DNS/IP SAN matching, including a
   bracketed IPv6 address, and reject a wrong hostname or untrusted CA.
 
+## Patch: expose complex column type schema ID
+
+- File: `t.go`
+- For a complex result column, append the server descriptor's schema ID to its
+  type name. The bridge resolves that ID through `ALL_OBJECTS`; the result
+  table's schema and the type's schema can differ.
+- Regression: `tests/integration/test_p1_array_types.py` uses same-named types
+  in two schemas and reads both a foreign object and an array of those objects
+  from tables owned by the login user.
+
 ## Patch: resolve service names with the bridge's default port
 
 - Files: `n.go`, `zzm.go`
