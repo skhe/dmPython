@@ -44,11 +44,13 @@ import (
 
 // connHandle represents a DPI connection.
 type connHandle struct {
-	mu   sync.Mutex
-	env  *envHandle
-	conn *dm.DmConnection // actual Go driver connection
-	db   *sql.DB          // holds the sql.DB for lifecycle management
-	tx   driver.Tx        // active transaction (nil if none)
+	mu             sync.Mutex
+	env            *envHandle
+	conn           *dm.DmConnection // actual Go driver connection
+	db             *sql.DB          // holds the sql.DB for lifecycle management
+	pinned         *sql.Conn        // manual transactions must stay on one physical connection
+	tx             driver.Tx        // active transaction (nil if none)
+	modeGeneration uint64           // invalidates statements prepared before an autocommit change
 
 	// Connection parameters (set before login)
 	host          string
@@ -117,6 +119,10 @@ func dpi_free_con(hcon C.dhcon) C.DPIRETURN {
 		return DSQL_INVALID_HANDLE
 	}
 	conn.mu.Lock()
+	if conn.pinned != nil {
+		conn.pinned.Close()
+		conn.pinned = nil
+	}
 	if conn.db != nil {
 		conn.db.Close()
 		conn.db = nil
@@ -148,10 +154,33 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 	case DSQL_ATTR_LOGIN_PORT:
 		conn.port = intVal
 	case DSQL_ATTR_AUTOCOMMIT:
-		conn.autocommit = (intVal != 0)
-		// If already connected, apply autocommit
-		if conn.conn != nil {
-			conn.conn.Exec("SET TRANSACTION AUTOCOMMIT "+map[bool]string{true: "ON", false: "OFF"}[conn.autocommit], nil)
+		enabled := intVal != 0
+		changed := enabled != conn.autocommit
+		if conn.db != nil && changed {
+			if enabled {
+				if dbErr := setPinnedAutoCommit(conn.pinned, true); dbErr != nil {
+					conn.lastErr = diagFromError(dbErr)
+					return DSQL_ERROR
+				}
+				conn.pinned.Close()
+				conn.pinned = nil
+			} else {
+				pinned, dbErr := conn.db.Conn(context.Background())
+				if dbErr != nil {
+					conn.lastErr = diagFromError(dbErr)
+					return DSQL_ERROR
+				}
+				if dbErr = setPinnedAutoCommit(pinned, false); dbErr != nil {
+					pinned.Close()
+					conn.lastErr = diagFromError(dbErr)
+					return DSQL_ERROR
+				}
+				conn.pinned = pinned
+			}
+		}
+		conn.autocommit = enabled
+		if changed {
+			conn.modeGeneration++
 		}
 	case DSQL_ATTR_LOGIN_TIMEOUT:
 		if intVal < 0 {
@@ -291,6 +320,16 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 	return DSQL_SUCCESS
 }
 
+func setPinnedAutoCommit(pinned *sql.Conn, enabled bool) error {
+	return pinned.Raw(func(driverConn interface{}) error {
+		dmConn, ok := driverConn.(*dm.DmConnection)
+		if !ok {
+			return fmt.Errorf("unexpected driver connection type: %T", driverConn)
+		}
+		return dmConn.SetAutoCommit(enabled)
+	})
+}
+
 //export dpi_get_con_attr
 func dpi_get_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, bufLen C.sdint4, valLen *C.sdint4) C.DPIRETURN {
 	conn, err := getConnHandle(hcon)
@@ -397,6 +436,10 @@ func dpi_get_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, bufLen C.sd
 		dead := C.sdint4(0) // DSQL_CD_FALSE
 		if conn.conn == nil {
 			dead = 1 // DSQL_CD_TRUE
+		} else if conn.pinned != nil {
+			if err := conn.pinned.PingContext(context.Background()); err != nil {
+				dead = 1
+			}
 		} else if conn.db != nil {
 			if err := conn.db.Ping(); err != nil {
 				dead = 1
@@ -573,8 +616,8 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 		}
 		return nil
 	})
-	rawConn.Close()
 	if dbErr != nil {
+		rawConn.Close()
 		db.Close()
 		conn.lastErr = &diagInfo{
 			errorCode: -1,
@@ -583,6 +626,7 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 		return DSQL_ERROR
 	}
 	if conn.sslPath != "" && dmConn.SSLMode() != 1 {
+		rawConn.Close()
 		db.Close()
 		conn.lastErr = &diagInfo{errorCode: -1, message: "ssl_path requested, but the server did not negotiate encrypted SSL"}
 		return DSQL_ERROR
@@ -590,6 +634,9 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 
 	conn.db = db
 	conn.conn = dmConn
+	if !conn.autocommit {
+		conn.pinned = rawConn
+	}
 	if dmConn.CompressionMode() != 0 {
 		conn.compressMsg = 1
 	} else {
@@ -598,18 +645,21 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 
 	// Try to get server version
 	var version string
-	row := db.QueryRow("SELECT BANNER FROM V$VERSION")
+	row := rawConn.QueryRowContext(context.Background(), "SELECT BANNER FROM V$VERSION")
 	if row.Scan(&version) == nil {
 		conn.serverVersion = version
 	}
 
 	// Get server encoding
 	var serverCode int32
-	row = db.QueryRow("SELECT UNICODE")
+	row = rawConn.QueryRowContext(context.Background(), "SELECT UNICODE")
 	if row.Scan(&serverCode) == nil {
 		if serverCode == 1 {
 			conn.serverCode = PG_UTF8
 		}
+	}
+	if conn.autocommit {
+		rawConn.Close()
 	}
 
 	return DSQL_SUCCESS
@@ -634,6 +684,10 @@ func dpi_logout(hcon C.dhcon) C.DPIRETURN {
 		conn.tx.Rollback()
 		conn.tx = nil
 	}
+	if conn.pinned != nil {
+		conn.pinned.Close()
+		conn.pinned = nil
+	}
 	if conn.db != nil {
 		conn.db.Close()
 		conn.db = nil
@@ -656,7 +710,12 @@ func dpi_commit(hcon C.dhcon) C.DPIRETURN {
 		return DSQL_ERROR
 	}
 
-	_, dbErr := conn.db.Exec("COMMIT")
+	var dbErr error
+	if conn.pinned != nil {
+		_, dbErr = conn.pinned.ExecContext(context.Background(), "COMMIT")
+	} else {
+		_, dbErr = conn.db.Exec("COMMIT")
+	}
 	if dbErr != nil {
 		conn.lastErr = &diagInfo{
 			errorCode: -1,
@@ -682,7 +741,12 @@ func dpi_rollback(hcon C.dhcon) C.DPIRETURN {
 		return DSQL_ERROR
 	}
 
-	_, dbErr := conn.db.Exec("ROLLBACK")
+	var dbErr error
+	if conn.pinned != nil {
+		_, dbErr = conn.pinned.ExecContext(context.Background(), "ROLLBACK")
+	} else {
+		_, dbErr = conn.db.Exec("ROLLBACK")
+	}
 	if dbErr != nil {
 		conn.lastErr = &diagInfo{
 			errorCode: -1,

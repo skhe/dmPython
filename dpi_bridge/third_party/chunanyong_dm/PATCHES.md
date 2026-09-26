@@ -181,6 +181,17 @@
 - Regression: `tests/integration/test_p1_connection_matrix.py` verifies service
   config paths containing spaces and `&`, and failover after a failed handshake.
 
+## Patch: update autocommit on a live driver connection
+
+- File: `bridge_options.go`
+- The DPI bridge pins one physical connection for manual transactions. Its
+  runtime autocommit setter updates the driver's wire-protocol flag on that
+  connection; executing a SQL `SET AUTOCOMMIT` command is not valid through the
+  driver. Switching back to autocommit first commits a pending transaction.
+- Regression: `test_autocommit_toggle_preserves_transaction_boundary` uses two
+  real DM8 connections. `scripts/verify_dm_restart_transaction.py` proves a
+  lost manual transaction cannot be reported as committed after restart.
+
 ## Rollback
 
 - Remove `replace gitee.com/chunanyong/dm => ./third_party/chunanyong_dm` in `dpi_bridge/go.mod`.

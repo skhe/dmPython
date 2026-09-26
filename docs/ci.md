@@ -6,6 +6,13 @@ The [data-type and connection-option matrix](test-results/2026-09-26-type-connec
 
 A separate ARM Linux job starts DM8 with mandatory SSL and tests a verified encrypted connection on Python 3.10. It also checks paths containing spaces and `&`, rejection of a wrong or missing server certificate pin, and rejection of a plain server when `ssl_path` is requested. The repository does not upload the CI client key as an artifact.
 
+Another isolated ARM job restarts DM8 while a `DECIMAL(30,8)` write is
+uncommitted. It requires `commit()` on that manual transaction connection to
+fail, verifies that no row was persisted, and checks that an already-open
+autocommit connection can resume querying. This runs through
+`scripts/verify_dm_restart_transaction.py` without access to the user's Orb
+network.
+
 The real-database job also exposes its disposable DM8 container to the BFILE tests. Those tests create a binary file in the container and a database directory with the temporary CI administrator credential, grant the test user read access, then remove both resources. Local runs need `DM_BFILE_TEST_CONTAINER` and `DM_CI_ADMIN_PASSWORD` to run these cases; without them, the BFILE cases are skipped. CI supplies both and treats skips as a gate failure.
 
 After all five real-database jobs pass, five macOS ARM jobs build and install wheels for CPython 3.9–3.13. They use the existing `DPI_HEADERS_TAR_B64` repository secret, so fork pull requests run the real-database matrix but skip macOS wheel builds. The required `CI gate` check accepts that documented fork exception; it requires both real-database and wheel jobs for trusted branches. Headers and image archives are not committed or uploaded as artifacts. The standalone `Integration Tests` workflow also runs the full five-version suite nightly and can be started manually. [Five-version results and release rehearsal](test-results/2026-09-25-five-python-release-rehearsal.md) record the exact scope.

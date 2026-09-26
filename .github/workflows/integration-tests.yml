@@ -188,3 +188,55 @@ jobs:
       - name: Show SSL database logs on failure
         if: failure()
         run: docker logs --tail 80 dmpython-ci-dm8-ssl || true
+
+  real-dm-restart-arm:
+    name: Real DM8 restart transaction / ARM Linux / Python 3.10
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache-dependency-path: dpi_bridge/go.sum
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Start isolated DM8 and extract build headers
+        run: |
+          admin_password="DmPyA1$(openssl rand -hex 12)"
+          echo "::add-mask::$admin_password"
+          {
+            echo "DM_RESTART_PASSWORD=$admin_password"
+            echo 'DM_RESTART_USER=SYSDBA'
+            echo 'DM_RESTART_HOST=127.0.0.1'
+            echo 'DM_RESTART_PORT=15240'
+            echo 'DM_RESTART_CONTAINER=dmpython-ci-dm8-restart'
+          } >> "$GITHUB_ENV"
+          docker pull --platform linux/arm64 \
+            yhl452493373/dm8@sha256:5b9d23c04b148d5765d6077d95b64032be64daedabeef9cddc7a4216b9ad0a1a
+          docker run -d --user root --name dmpython-ci-dm8-restart \
+            -e SYSDBA_PWD="$admin_password" -e SYSAUDITOR_PWD="$admin_password" \
+            -e CHARSET=1 -e DB_NAME=DMPYRESTART -e INSTANCE_NAME=DMPYRESTART \
+            -p 127.0.0.1:15240:5236 \
+            yhl452493373/dm8@sha256:5b9d23c04b148d5765d6077d95b64032be64daedabeef9cddc7a4216b9ad0a1a
+          mkdir -p dpi_include
+          docker cp dmpython-ci-dm8-restart:/opt/dmdbms/drivers/dpi/include/. dpi_include/
+          test -f dpi_include/DPI.h
+
+      - name: Verify restart transaction semantics
+        timeout-minutes: 10
+        run: |
+          python -m pip install setuptools wheel
+          if ! python setup.py build_ext --inplace > /tmp/dmpython-restart-build.log 2>&1; then
+            tail -80 /tmp/dmpython-restart-build.log
+            exit 1
+          fi
+          PYTHONPATH="$PWD" python scripts/verify_dm_restart_transaction.py
+
+      - name: Show restart database logs on failure
+        if: failure()
+        run: docker logs --tail 80 dmpython-ci-dm8-restart || true
