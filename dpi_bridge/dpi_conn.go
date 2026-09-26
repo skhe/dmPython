@@ -71,10 +71,11 @@ type connHandle struct {
 
 func newConnHandle(env *envHandle) *connHandle {
 	return &connHandle{
-		env:        env,
-		port:       DSQL_DEAFAULT_TCPIP_PORT,
-		autocommit: false,
-		serverCode: PG_UTF8,
+		env:          env,
+		port:         DSQL_DEAFAULT_TCPIP_PORT,
+		autocommit:   false,
+		loginTimeout: 5000,
+		serverCode:   PG_UTF8,
 	}
 }
 
@@ -358,9 +359,6 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	} else {
 		params = append(params, "autoCommit=false")
 	}
-	if conn.connTimeout > 0 {
-		params = append(params, fmt.Sprintf("socketTimeout=%d", conn.connTimeout))
-	}
 	if conn.appName != "" {
 		params = append(params, "appName="+url.QueryEscape(conn.appName))
 	}
@@ -381,7 +379,7 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 	ctx := context.Background()
 	if conn.loginTimeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(conn.loginTimeout)*time.Second)
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(conn.loginTimeout)*time.Millisecond)
 		defer cancel()
 	}
 	rawConn, dbErr := db.Conn(ctx)

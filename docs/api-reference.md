@@ -60,8 +60,10 @@ dmPython.connect(
 
 - `host` 与 `server` 互斥（只允许设置一个）。
 - `user` 支持 `user/password@server:port[/schema][?catalog=...]` 形式。
-- `login_timeout` 以秒为单位，限制首次建连握手；`connection_timeout` 以秒为单位，传给底层 TCP 拨号超时。两者均不限制 SQL 执行时间。
+- `login_timeout` 以毫秒为单位，默认 5000，限制首次建连握手；设为 0 表示不限制。`connection_timeout` 以秒为单位，默认 0 不限制，限制 SQL 执行时间。
 - 常量参数建议使用模块常量（如 `DSQL_AUTOCOMMIT_ON`、`ISO_LEVEL_READ_COMMITTED`）。
+
+超时单位与默认值依据[达梦 dmPython 接口文档](https://eco.dameng.com/document/dm/zh-cn/pm/dmpython-interface)和 [DPI 编程指南](https://eco.dameng.com/document/dm/zh-cn/pm/dpi-rogramming-guide)。
 
 ### 模块函数
 

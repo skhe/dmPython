@@ -96,7 +96,7 @@ def test_port_rejects_non_numeric_value(conn_params):
     "option",
     [
         {"connection_timeout": 5},
-        {"login_timeout": 5},
+        {"login_timeout": 5000},
         {"compress_msg": 0},
         {"use_stmt_pool": 1},
     ],
@@ -111,16 +111,22 @@ def test_optional_setting_connects_and_queries(conn_params, option):
 def test_connection_timeout_options_are_reported(conn_params):
     with dmPython.connect(
         **conn_params,
-        login_timeout=2,
+        login_timeout=2000,
         connection_timeout=2,
         app_name="dmpython & matrix+1",
     ) as conn:
-        assert conn.login_timeout == 2
+        assert conn.login_timeout == 2000
         assert conn.connection_timeout == 2
         assert conn.app_name == "dmpython & matrix+1"
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
             assert cur.fetchone() == (1,)
+
+
+def test_timeout_defaults_match_dm_interface(conn_params):
+    with dmPython.connect(**conn_params) as conn:
+        assert conn.login_timeout == 5000
+        assert conn.connection_timeout == 0
 
 
 def test_login_timeout_interrupts_unresponsive_handshake():
@@ -132,7 +138,7 @@ import time
 start = time.monotonic()
 try:
     dmPython.connect(user="probe", password="probe", server="127.0.0.1",
-                     port=int(sys.argv[1]), login_timeout=1)
+                     port=int(sys.argv[1]), login_timeout=1000)
 except dmPython.Error:
     print(time.monotonic() - start)
 else:
@@ -160,3 +166,67 @@ else:
 
     assert child.returncode == 0, stderr
     assert float(stdout.strip()) < 3
+
+
+@pytest.mark.parametrize("statement", ["direct", "prepared", "select_for_update"])
+def test_connection_timeout_limits_sql_execution(
+    conn, table_name_factory, drop_table, statement
+):
+    table = table_name_factory("DMPY_TIMEOUT")
+    cur = conn.cursor()
+    code = """
+import dmPython
+import os
+import sys
+import time
+
+conn = dmPython.connect(
+    user=os.environ["DM_TEST_USER"],
+    password=os.environ["DM_TEST_PASSWORD"],
+    server=os.environ["DM_TEST_HOST"],
+    port=int(os.environ["DM_TEST_PORT"]),
+    connection_timeout=1,
+)
+cur = conn.cursor()
+start = time.monotonic()
+try:
+    if sys.argv[2] == "select_for_update":
+        cur.execute(f"SELECT v FROM {sys.argv[1]} WHERE id=1 FOR UPDATE")
+        cur.fetchone()
+    elif sys.argv[2] == "prepared":
+        cur.execute(f"UPDATE {sys.argv[1]} SET v=? WHERE id=1", (3,))
+    else:
+        cur.execute(f"UPDATE {sys.argv[1]} SET v=3 WHERE id=1")
+except dmPython.Error:
+    print(time.monotonic() - start)
+else:
+    raise AssertionError("blocked update unexpectedly completed")
+cur.execute("SELECT 1")
+assert cur.fetchone() == (1,)
+"""
+    try:
+        cur.execute(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, v INTEGER)")
+        cur.execute(f"INSERT INTO {table} VALUES (1, 1)")
+        conn.commit()
+        cur.execute(f"UPDATE {table} SET v=2 WHERE id=1")
+
+        child = subprocess.Popen(
+            [sys.executable, "-c", code, table, statement],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=os.environ.copy(),
+        )
+        try:
+            stdout, stderr = child.communicate(timeout=6)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate()
+        assert child.returncode == 0, stderr
+        assert 0.5 < float(stdout.strip()) < 4
+    finally:
+        conn.rollback()
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()

@@ -764,6 +764,11 @@ func (conn *DmConnection) CompatibleMysql() bool {
 
 func (conn *DmConnection) cancel(err error) {
 	conn.canceled.Set(err)
+	// Close the socket before cleanup. Cleanup sends a rollback, which cannot
+	// complete while the server is blocked on the canceled statement.
+	if conn.Access != nil && conn.Access.dm_build_415 != nil {
+		conn.Access.dm_build_415.Close()
+	}
 	conn.close()
 
 }

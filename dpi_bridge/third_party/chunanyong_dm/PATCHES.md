@@ -44,6 +44,15 @@
 - Regression: `test_login_timeout_interrupts_unresponsive_handshake` uses a
   local TCP listener that accepts a connection but never replies.
 
+## Patch: interrupt blocked statements on context timeout
+
+- File: `m.go`
+- Problem: context cancellation called cleanup, which tried to roll back on a
+  socket still blocked in a statement. The caller waited indefinitely.
+- Fix: close the socket before cleanup so the blocked read and rollback return.
+- Regression: `test_connection_timeout_limits_sql_execution` holds a row lock
+  while another session executes an update with a one-second timeout.
+
 ## Patch: application name query value
 
 - File: `n.go`

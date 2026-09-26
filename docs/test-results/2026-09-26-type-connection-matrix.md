@@ -36,7 +36,7 @@
 
 `INTERVAL DAY TO SECOND` 现可与 Python `datetime.timedelta` 往返，包括负数、微秒、零值和负 10 万天；读取时描述类型为 `dmPython.INTERVAL`。`INTERVAL YEAR TO MONTH` 的文本参数与读取类型 `dmPython.YEAR_MONTH_INTERVAL` 也已验证，两个区间类型的 `NULL` 往返通过。旧实现对大负区间读取发生 32 位整数溢出，本轮已修复。
 
-`login_timeout` 现限制完整建连握手：本机假服务端接受 TCP 后不回复，设为 1 秒会在约 1 秒内报错。`connection_timeout` 以秒传递给底层 TCP 拨号选项，属性读回与输入一致；`app_name` 会传给底层驱动并可读回。本机官方 DM8 上，Python 3.9、3.10、3.11、3.12、3.13 的完整真实库回归均为 **121 passed、0 failed**，另有 2 个非真实库用例未选入。
+当时的实现将 `login_timeout=1` 解释为 1 秒，并把 `connection_timeout` 用于 TCP 拨号；这与达梦官方接口定义不符，已在后续修复中更正。本机官方 DM8 上，当时 Python 3.9、3.10、3.11、3.12、3.13 的完整真实库回归均为 **121 passed、0 failed**，另有 2 个非真实库用例未选入。
 
 ## 下一轮边界
 
