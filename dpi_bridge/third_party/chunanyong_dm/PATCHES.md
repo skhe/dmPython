@@ -121,6 +121,9 @@
 - Expose the element type name and OID without querying privileged
   `SYS.SYSOBJECTS`; the bridge resolves visible object types through
   `ALL_TYPES` and supplies nested descriptors for arrays of objects.
+- The bridge treats nested fetch handle slots as outputs and allocates a fresh
+  handle when a slot contains no live object handle. This avoids depending on
+  uninitialized C stack values, which failed on Linux ARM runners.
 - Encode pointer-valued nested arrays and reject malformed complex elements
   instead of panicking on an invalid type assertion or nil slice index.
 - Regression: `tests/integration/test_p1_array_types.py` covers an array of

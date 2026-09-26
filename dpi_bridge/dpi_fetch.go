@@ -588,7 +588,8 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16, objec
 		writeLobHandleValue(val, bind, sqlType)
 	case DSQL_C_CLASS, DSQL_C_RECORD, DSQL_C_ARRAY, DSQL_C_SARRAY:
 		hobj := *(*C.dhobj)(bind.dataPtr)
-		if hobj == nil {
+		stored, valid := getHandle(ptrToHandle(unsafe.Pointer(hobj)))
+		if _, isObject := stored.(*objHandle); !valid || !isObject {
 			id := allocHandle(&objHandle{})
 			hobj = C.dhobj(handleToPtr(id))
 			*(*C.dhobj)(bind.dataPtr) = hobj
