@@ -72,6 +72,16 @@
 - Regression: `tests/integration/test_p1_object_types.py` covers nested object
   writes and reads against a real database.
 
+## Patch: expose array type metadata and encode nested arrays
+
+- Files: `type_info.go`, `zzo.go`
+- The bridge reads element type and maximum length from the driver's server
+  descriptor instead of parsing type DDL text.
+- Initialize nested `DmArray` values with the field descriptor before encoding;
+  otherwise an array inside an object is silently written as empty.
+- Regression: `tests/integration/test_p1_array_types.py` covers high-precision
+  decimals, Unicode, nulls, empty arrays, length limits, and arrays in objects.
+
 ## Rollback
 
 - Remove `replace gitee.com/chunanyong/dm => ./third_party/chunanyong_dm` in `dpi_bridge/go.mod`.

@@ -585,7 +585,7 @@ func writeValueToBinding(val interface{}, bind bindColInfo, sqlType int16, objec
 		return writeIntervalDaySecondValue(val, bind)
 	case DSQL_C_LOB_HANDLE:
 		writeLobHandleValue(val, bind, sqlType)
-	case DSQL_C_CLASS, DSQL_C_RECORD:
+	case DSQL_C_CLASS, DSQL_C_RECORD, DSQL_C_ARRAY, DSQL_C_SARRAY:
 		hobj := *(*C.dhobj)(bind.dataPtr)
 		if hobj == nil {
 			id := allocHandle(&objHandle{})
@@ -1239,7 +1239,7 @@ func extractBoundValue(bind bindParamInfo) interface{} {
 			return string(data)
 		}
 		return data
-	case DSQL_C_CLASS, DSQL_C_RECORD:
+	case DSQL_C_CLASS, DSQL_C_RECORD, DSQL_C_ARRAY, DSQL_C_SARRAY:
 		hobj := *(*C.dhobj)(bind.dataPtr)
 		value, ok := getHandle(ptrToHandle(unsafe.Pointer(hobj)))
 		obj, typed := value.(*objHandle)
