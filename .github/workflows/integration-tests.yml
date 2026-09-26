@@ -11,13 +11,14 @@ permissions:
 
 jobs:
   real-dm-arm:
-    name: Real DM8 / ARM Linux / Python ${{ matrix.python-version }}
+    name: Real DM8 / ARM Linux / Python ${{ matrix.python-version }} / UNICODE ${{ matrix.charset }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        charset: [1, 0]
     steps:
       - uses: actions/checkout@v4
 
@@ -48,11 +49,12 @@ jobs:
             echo 'DM_TEST_HOST=127.0.0.1'
             echo 'DM_TEST_PORT=15236'
             echo 'DM_BFILE_TEST_CONTAINER=dmpython-ci-dm8'
+            echo 'DM_EXPECT_UNICODE=${{ matrix.charset }}'
           } >> "$GITHUB_ENV"
           docker run -d --user root --name dmpython-ci-dm8 \
             -e SYSDBA_PWD="$admin_password" \
             -e SYSAUDITOR_PWD="$admin_password" \
-            -e CHARSET=1 -e DB_NAME=DMPYTEST -e INSTANCE_NAME=DMPYTEST \
+            -e CHARSET=${{ matrix.charset }} -e DB_NAME=DMPYTEST -e INSTANCE_NAME=DMPYTEST \
             -p 127.0.0.1:15236:5236 \
             yhl452493373/dm8@sha256:5b9d23c04b148d5765d6077d95b64032be64daedabeef9cddc7a4216b9ad0a1a
           mkdir -p dpi_include
@@ -86,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: real-dm-arm-py${{ matrix.python-version }}
+          name: real-dm-arm-py${{ matrix.python-version }}-unicode${{ matrix.charset }}
           path: |
             pytest-dm.xml
             trend-dm.json

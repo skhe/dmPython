@@ -46,6 +46,13 @@ try:
     assert cur.fetchone() == (1,)
     cur.execute("SELECT ID_CODE FROM V$INSTANCE")
     server_id_code = cur.fetchone()[0]
+    cur.execute("SELECT UNICODE")
+    server_unicode = int(cur.fetchone()[0])
+    expected_unicode = int(os.environ["DM_EXPECT_UNICODE"])
+    if server_unicode != expected_unicode:
+        raise RuntimeError(
+            f"DM8 UNICODE={server_unicode}, expected {expected_unicode}"
+        )
 finally:
     test_conn.close()
 Path("dm-ci-environment.json").write_text(
@@ -55,6 +62,7 @@ Path("dm-ci-environment.json").write_text(
             "machine": platform.machine(),
             "driver": dmPython.version,
             "server_id_code": server_id_code,
+            "server_unicode": server_unicode,
         },
         indent=2,
     ) + "\n",

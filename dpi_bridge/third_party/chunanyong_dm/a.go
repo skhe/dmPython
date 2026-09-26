@@ -821,7 +821,10 @@ func (dm_build_666 *dm_build_414) dm_build_665(dm_build_667 *DmStatement, dm_bui
 	var dm_build_671 = Dm_build_4()
 	dm_build_670.read(dm_build_671)
 	var dm_build_672 = 0
-	var utf8ClobParam = dm_build_668.colType == CLOB && dm_build_666.dm_build_418.getServerEncoding() == "UTF-8"
+	clobEncoding := ""
+	if dm_build_668.colType == CLOB {
+		clobEncoding = dm_build_666.dm_build_418.getServerEncoding()
+	}
 	for !dm_build_670.isReadOver() || dm_build_671.Dm_build_5() > 0 {
 		if !dm_build_670.isReadOver() && dm_build_671.Dm_build_5() < Dm_build_820 {
 			dm_build_670.read(dm_build_671)
@@ -831,13 +834,18 @@ func (dm_build_666 *dm_build_414) dm_build_665(dm_build_667 *DmStatement, dm_bui
 		} else {
 			dm_build_672 = dm_build_671.Dm_build_5()
 		}
-		if utf8ClobParam && dm_build_672 == Dm_build_820 && dm_build_671.Dm_build_5() > dm_build_672 {
-			safeLen := dm_build_672
-			for safeLen > 0 && (dm_build_671.dm_build_32(safeLen)&0xC0) == 0x80 {
-				safeLen--
-			}
-			if safeLen > 0 {
-				dm_build_672 = safeLen
+		if dm_build_672 == Dm_build_820 && dm_build_671.Dm_build_5() > dm_build_672 {
+			switch clobEncoding {
+			case ENCODING_UTF8:
+				safeLen := dm_build_672
+				for safeLen > 0 && (dm_build_671.dm_build_32(safeLen)&0xC0) == 0x80 {
+					safeLen--
+				}
+				if safeLen > 0 {
+					dm_build_672 = safeLen
+				}
+			case ENCODING_GB18030:
+				dm_build_672 = gb18030SafePrefix(dm_build_671, dm_build_672)
 			}
 		}
 
