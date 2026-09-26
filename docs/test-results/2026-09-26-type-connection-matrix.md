@@ -61,3 +61,7 @@
 ## 后续修复：本地时区时间戳绑定
 
 `TIMESTAMP WITH LOCAL TIME ZONE` 列原先拒绝带时区的 Python `datetime`，返回 6015 日期时间格式错误。原因是 Python 默认格式把 `+05:30` 等偏移量紧贴时间，而该列要求偏移量前有空格。现在只在绑定 Python 带时区时间对象时规范化格式；正负偏移量与跨日输入均通过。Python 3.10 在 UTF-8 和 GB18030 官方 ARM DM8 实例上的完整真实库回归各为 **168 passed、0 skipped**，另各有 2 个非真实库用例未选入。
+
+## 后续修复：区间子类型
+
+桥接层原先只识别 `DAY TO SECOND` 和 `YEAR TO MONTH` 两种区间列；真实 DM8 中其余 11 种区间限定形式均被读成普通字符串。现在按 DPI 类型码识别全部 13 种形式。`DAY`、`HOUR`、`MINUTE`、`SECOND` 及其组合读为 `datetime.timedelta`，`YEAR`、`MONTH` 和 `YEAR TO MONTH` 保留 `dmPython.YEAR_MONTH_INTERVAL` 描述类型；部分子类型的正负 `timedelta` 写入也验证通过。Python 3.10 在 UTF-8 和 GB18030 官方 ARM DM8 实例上的完整真实库回归各为 **183 passed、0 skipped**，另各有 2 个非真实库用例未选入。

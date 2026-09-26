@@ -197,6 +197,21 @@ const (
 	DSQL_INTERVAL_DAY_TO_SECOND = 109
 )
 
+// Remaining DPI interval subtype codes (DPI.h, base 100).
+const (
+	DSQL_INTERVAL_YEAR             = 100
+	DSQL_INTERVAL_MONTH            = 101
+	DSQL_INTERVAL_DAY              = 102
+	DSQL_INTERVAL_HOUR             = 103
+	DSQL_INTERVAL_MINUTE           = 104
+	DSQL_INTERVAL_SECOND           = 105
+	DSQL_INTERVAL_DAY_TO_HOUR      = 107
+	DSQL_INTERVAL_DAY_TO_MINUTE    = 108
+	DSQL_INTERVAL_HOUR_TO_MINUTE   = 110
+	DSQL_INTERVAL_HOUR_TO_SECOND   = 111
+	DSQL_INTERVAL_MINUTE_TO_SECOND = 112
+)
+
 // Environment/Connection attributes (from DPIext.h)
 const (
 	DSQL_ATTR_LOCAL_CODE      = 12345

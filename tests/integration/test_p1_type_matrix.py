@@ -308,3 +308,98 @@ def test_year_month_interval_text_roundtrip(conn, table_name_factory, drop_table
         drop_table(cur, table)
         conn.commit()
         cur.close()
+
+
+@pytest.mark.parametrize(
+    ("qualifier", "literal", "expected"),
+    [
+        ("DAY(9)", "12", dt.timedelta(days=12)),
+        ("HOUR(9)", "27", dt.timedelta(hours=27)),
+        ("MINUTE(9)", "1600", dt.timedelta(minutes=1600)),
+        ("SECOND(9,6)", "123.123456", dt.timedelta(seconds=123, microseconds=123456)),
+        ("DAY(9) TO HOUR", "12 03", dt.timedelta(days=12, hours=3)),
+        ("DAY(9) TO MINUTE", "12 03:04", dt.timedelta(days=12, hours=3, minutes=4)),
+        ("HOUR(9) TO MINUTE", "27:04", dt.timedelta(hours=27, minutes=4)),
+        (
+            "HOUR(9) TO SECOND(6)",
+            "27:04:05.123456",
+            dt.timedelta(hours=27, minutes=4, seconds=5, microseconds=123456),
+        ),
+        (
+            "MINUTE(9) TO SECOND(6)",
+            "1600:05.123456",
+            dt.timedelta(minutes=1600, seconds=5, microseconds=123456),
+        ),
+    ],
+)
+def test_day_second_interval_qualifiers_return_timedelta(
+    conn, table_name_factory, drop_table, qualifier, literal, expected
+):
+    table = table_name_factory("DMPY_INTERVAL_PART")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (v INTERVAL {qualifier})")
+        cur.execute(f"INSERT INTO {table} VALUES (INTERVAL '{literal}' {qualifier})")
+        conn.commit()
+        cur.execute(f"SELECT v FROM {table}")
+        assert cur.description[0][1] is dmPython.INTERVAL
+        assert cur.fetchone() == (expected,)
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
+
+
+@pytest.mark.parametrize(
+    ("qualifier", "value"),
+    [
+        ("DAY(9) TO HOUR", dt.timedelta(days=12, hours=3)),
+        ("HOUR(9) TO MINUTE", -dt.timedelta(hours=27, minutes=4)),
+        (
+            "HOUR(9) TO SECOND(6)",
+            dt.timedelta(hours=27, minutes=4, seconds=5, microseconds=123456),
+        ),
+        (
+            "MINUTE(9) TO SECOND(6)",
+            dt.timedelta(minutes=1600, seconds=5, microseconds=123456),
+        ),
+    ],
+)
+def test_day_second_interval_qualifiers_accept_timedelta(
+    conn, table_name_factory, drop_table, qualifier, value
+):
+    table = table_name_factory("DMPY_INTERVAL_BIND_PART")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (v INTERVAL {qualifier})")
+        cur.execute(f"INSERT INTO {table} VALUES (?)", (value,))
+        conn.commit()
+        cur.execute(f"SELECT v FROM {table}")
+        assert cur.description[0][1] is dmPython.INTERVAL
+        assert cur.fetchone() == (value,)
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
+
+
+@pytest.mark.parametrize(
+    ("qualifier", "literal"),
+    [("YEAR(9)", "123"), ("MONTH(9)", "15")],
+)
+def test_year_month_interval_qualifiers_keep_type(
+    conn, table_name_factory, drop_table, qualifier, literal
+):
+    table = table_name_factory("DMPY_INTERVAL_YM_PART")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"CREATE TABLE {table} (v INTERVAL {qualifier})")
+        cur.execute(f"INSERT INTO {table} VALUES (INTERVAL '{literal}' {qualifier})")
+        conn.commit()
+        cur.execute(f"SELECT v FROM {table}")
+        assert cur.description[0][1] is dmPython.YEAR_MONTH_INTERVAL
+        assert re.search(rf"'{literal.zfill(9)}'", cur.fetchone()[0])
+    finally:
+        drop_table(cur, table)
+        conn.commit()
+        cur.close()
