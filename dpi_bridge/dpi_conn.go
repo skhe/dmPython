@@ -42,6 +42,11 @@ import (
 	dm "gitee.com/chunanyong/dm"
 )
 
+const (
+	accessModeReadWrite = 0
+	accessModeReadOnly  = 1
+)
+
 // connHandle represents a DPI connection.
 type connHandle struct {
 	mu             sync.Mutex
@@ -59,6 +64,7 @@ type connHandle struct {
 	password      string
 	schema        string
 	autocommit    bool
+	accessMode    int
 	loginTimeout  int
 	connTimeout   int
 	appName       string
@@ -162,16 +168,36 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 					conn.lastErr = diagFromError(dbErr)
 					return DSQL_ERROR
 				}
-				conn.pinned.Close()
-				conn.pinned = nil
-			} else {
-				pinned, dbErr := conn.db.Conn(context.Background())
-				if dbErr != nil {
-					conn.lastErr = diagFromError(dbErr)
-					return DSQL_ERROR
+				if conn.accessMode == accessModeReadOnly {
+					if err := setSessionAccessMode(conn.pinned, conn.accessMode); err != nil {
+						// Changing autocommit can reset the driver's read-only
+						// transaction flag. Never keep an unprotected session.
+						conn.pinned.Close()
+						conn.pinned = nil
+						conn.db.Close()
+						conn.db = nil
+						conn.conn = nil
+						conn.lastErr = diagFromError(err)
+						return DSQL_ERROR
+					}
+				} else {
+					conn.pinned.Close()
+					conn.pinned = nil
 				}
-				if dbErr = setPinnedAutoCommit(pinned, false); dbErr != nil {
-					pinned.Close()
+			} else {
+				pinned := conn.pinned
+				if pinned == nil {
+					var dbErr error
+					pinned, dbErr = conn.db.Conn(context.Background())
+					if dbErr != nil {
+						conn.lastErr = diagFromError(dbErr)
+						return DSQL_ERROR
+					}
+				}
+				if dbErr := setPinnedAutoCommit(pinned, false); dbErr != nil {
+					if pinned != conn.pinned {
+						pinned.Close()
+					}
 					conn.lastErr = diagFromError(dbErr)
 					return DSQL_ERROR
 				}
@@ -181,6 +207,11 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		conn.autocommit = enabled
 		if changed {
 			conn.modeGeneration++
+		}
+	case DSQL_ATTR_ACCESS_MODE:
+		if err := conn.setAccessMode(intVal); err != nil {
+			conn.lastErr = diagFromError(err)
+			return DSQL_ERROR
 		}
 	case DSQL_ATTR_LOGIN_TIMEOUT:
 		if intVal < 0 {
@@ -311,7 +342,7 @@ func dpi_set_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, valLen C.sd
 		DSQL_ATTR_OSAUTH_TYPE, DSQL_ATTR_DDL_AUTOCOMMIT,
 		DSQL_ATTR_COMPATIBLE_MODE, DSQL_ATTR_SHAKE_CRYPTO,
 		DSQL_ATTR_NLS_NUMERIC_CHARACTERS,
-		DSQL_ATTR_ACCESS_MODE, DSQL_ATTR_PACKET_SIZE,
+		DSQL_ATTR_PACKET_SIZE,
 		DSQL_ATTR_CURRENT_CATALOG:
 		// Accept but ignore these for now
 	default:
@@ -328,6 +359,48 @@ func setPinnedAutoCommit(pinned *sql.Conn, enabled bool) error {
 		}
 		return dmConn.SetAutoCommit(enabled)
 	})
+}
+
+func setSessionAccessMode(pinned *sql.Conn, mode int) error {
+	_, err := pinned.ExecContext(context.Background(), fmt.Sprintf("SP_SET_SESSION_READONLY(%d)", mode))
+	return err
+}
+
+// Caller holds conn.mu. Read-only sessions remain pinned even in autocommit
+// mode, so a pooled/reconnected session cannot silently lose this setting.
+func (conn *connHandle) setAccessMode(mode int) error {
+	if mode != accessModeReadWrite && mode != accessModeReadOnly {
+		return fmt.Errorf("access_mode must be READ_WRITE (0) or READ_ONLY (1)")
+	}
+	if conn.accessMode == mode {
+		return nil
+	}
+	if conn.db == nil {
+		conn.accessMode = mode
+		return nil
+	}
+	pinned := conn.pinned
+	if pinned == nil {
+		var err error
+		pinned, err = conn.db.Conn(context.Background())
+		if err != nil {
+			return err
+		}
+	}
+	if err := setSessionAccessMode(pinned, mode); err != nil {
+		if pinned != conn.pinned {
+			pinned.Close()
+		}
+		return err
+	}
+	conn.accessMode = mode
+	conn.modeGeneration++
+	conn.pinned = pinned
+	if mode == accessModeReadWrite && conn.autocommit {
+		conn.pinned.Close()
+		conn.pinned = nil
+	}
+	return nil
 }
 
 //export dpi_get_con_attr
@@ -406,6 +479,31 @@ func dpi_get_con_attr(hcon C.dhcon, attrID C.sdint4, val C.dpointer, bufLen C.sd
 		*(*C.udint4)(val) = v
 		if valLen != nil {
 			*valLen = 4
+		}
+	case DSQL_ATTR_ACCESS_MODE:
+		*(*C.udint4)(val) = C.udint4(conn.accessMode)
+		if valLen != nil {
+			*valLen = 4
+		}
+	case DSQL_ATTR_CURRENT_CATALOG:
+		if conn.db == nil {
+			conn.lastErr = &diagInfo{errorCode: -1, message: "Not connected"}
+			return DSQL_ERROR
+		}
+		var row *sql.Row
+		if conn.pinned != nil {
+			row = conn.pinned.QueryRowContext(context.Background(), "SELECT NAME FROM V$DATABASE")
+		} else {
+			row = conn.db.QueryRow("SELECT NAME FROM V$DATABASE")
+		}
+		var catalog string
+		if err := row.Scan(&catalog); err != nil {
+			conn.lastErr = diagFromError(err)
+			return DSQL_ERROR
+		}
+		n := cStringLen((*C.sdbyte)(val), int(bufLen), catalog)
+		if valLen != nil {
+			*valLen = C.sdint4(n)
 		}
 	case DSQL_ATTR_TXN_ISOLATION:
 		*(*C.sdint4)(val) = C.sdint4(conn.txnIsolation)
@@ -631,10 +729,18 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 		conn.lastErr = &diagInfo{errorCode: -1, message: "ssl_path requested, but the server did not negotiate encrypted SSL"}
 		return DSQL_ERROR
 	}
+	if conn.accessMode == accessModeReadOnly {
+		if err := setSessionAccessMode(rawConn, conn.accessMode); err != nil {
+			rawConn.Close()
+			db.Close()
+			conn.lastErr = diagFromError(err)
+			return DSQL_ERROR
+		}
+	}
 
 	conn.db = db
 	conn.conn = dmConn
-	if !conn.autocommit {
+	if !conn.autocommit || conn.accessMode == accessModeReadOnly {
 		conn.pinned = rawConn
 	}
 	if dmConn.CompressionMode() != 0 {
@@ -658,7 +764,7 @@ func dpi_login(hcon C.dhcon, svr *C.sdbyte, user *C.sdbyte, pwd *C.sdbyte) C.DPI
 			conn.serverCode = PG_UTF8
 		}
 	}
-	if conn.autocommit {
+	if conn.autocommit && conn.accessMode == accessModeReadWrite {
 		rawConn.Close()
 	}
 
